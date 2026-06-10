@@ -229,6 +229,27 @@ ensure_ap_ip() {
     iface_up_with_addr
 }
 
+stabilize_ap_ip() {
+    attempts=${1:-3}
+    delay=${2:-1}
+    count=0
+
+    while [ "$count" -lt "$attempts" ]; do
+        ensure_ap_ip
+        sleep "$delay"
+
+        if verify_iface_has_ip; then
+            count=$((count + 1))
+            continue
+        fi
+
+        log "AP address disappeared after stabilization check, retrying"
+        count=$((count + 1))
+    done
+
+    ensure_ap_ip
+}
+
 show_iface_status() {
     if command -v ifconfig >/dev/null 2>&1; then
         ifconfig "$WLAN_IFACE"

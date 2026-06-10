@@ -21,7 +21,7 @@ configure_route
 log "launching hostapd"
 start_hostapd
 sleep 1
-ensure_ap_ip
+stabilize_ap_ip 4 1
 
 start_dhcp_server
 
