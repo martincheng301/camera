@@ -30,7 +30,7 @@ The priority order from the technical route is:
 8. SD card recording path
 9. `eth0` static IP persistence
 
-Current active priority is item 4: STA connection, with Stage 4 code implemented and pending board-side validation.
+Current active priority is item 6: control protocol, with Stage 7 minimal HTTP control now implemented.
 
 ## Board Environment
 
@@ -43,7 +43,7 @@ Current active priority is item 4: STA connection, with Stage 4 code implemented
   - `ifconfig`
   - `route`
   - `udhcpd` preferred, `dnsmasq` fallback
-  - `httpd`
+  - `nginx` with `fcgiwrap` for CGI handling
 
 ## Driver Facts
 
@@ -75,18 +75,24 @@ Success condition:
 - `scripts/stop_ap.sh`: AP shutdown
 - `scripts/start_config_server.sh`: config HTTP server start
 - `scripts/save_wifi.sh`: provisioning save handler
+- `scripts/save_wifi_args.sh`: shared provisioning save backend
 - `scripts/save_wifi_cli.sh`: CLI credential save helper
 - `scripts/check_wifi_config.sh`: saved config validation
 - `scripts/start_sta.sh`: STA startup helper
 - `scripts/stop_sta.sh`: STA shutdown helper
 - `boot_network.sh`: top-level Stage 5 auto network entry
 - `scripts/boot_network.sh`: Stage 5 STA-first then AP-fallback logic
+- `scripts/device_status.sh`: Stage 7 status backend
+- `scripts/control_record.sh`: Stage 7 record control backend
 - `scripts/lib.sh`: shared helpers and common logic
 - `conf/hostapd/hostapd.conf`: AP config template
 - `conf/udhcpd/udhcpd.conf`: DHCP config template
 - `conf/dnsmasq/dnsmasq.conf`: DHCP fallback template
 - `www/index.html`: provisioning page
 - `www/cgi-bin/save_wifi.cgi`: CGI save entry
+- `www/control.html`: Stage 7 control page
+- `www/cgi-bin/status.cgi`: CGI status entry
+- `www/cgi-bin/record.cgi`: CGI record control entry
 - `runtime/`: generated runtime files
 
 ## Stage Status
@@ -97,6 +103,7 @@ Success condition:
 - Stage 3: minimal provisioning page and save flow implemented
 - Stage 4: STA scripts implemented
 - Stage 5: minimal boot state machine implemented
+- Stage 7: minimal HTTP control channel implemented
 
 ## Standard Network Defaults
 
@@ -175,6 +182,9 @@ Current repository status:
 - `scripts/stop_sta.sh` stops STA-side processes and clears interface state
 - `scripts/check_wifi_config.sh` validates presence of saved config
 - `scripts/boot_network.sh` chooses STA first when config exists, else AP fallback
+- `scripts/save_wifi_args.sh` owns the canonical Wi-Fi config write path
+- `scripts/device_status.sh` reports current mode, IP, and recording state
+- `scripts/control_record.sh` implements minimal start/stop/status actions
 - `scripts/lib.sh` contains AP-to-STA cleanup and wait-for-IP logic
 
 ## Known Failure Patterns

@@ -18,33 +18,7 @@ if [ -n "$psk" ] && [ "${#psk}" -lt 8 ]; then
     exit 1
 fi
 
-ensure_provision_dir
-
-cat >"$PROVISION_STAGING_FILE" <<EOF
-SSID=$ssid
-PSK=$psk
-EOF
-
-cat >"$WPA_SUPPLICANT_CONF" <<EOF
-ctrl_interface=/var/run/wpa_supplicant
-update_config=1
-network={
-    ssid="$ssid"
-EOF
-
-if [ -n "$psk" ]; then
-    cat >>"$WPA_SUPPLICANT_CONF" <<EOF
-    psk="$psk"
-EOF
-else
-    cat >>"$WPA_SUPPLICANT_CONF" <<EOF
-    key_mgmt=NONE
-EOF
-fi
-
-cat >>"$WPA_SUPPLICANT_CONF" <<EOF
-}
-EOF
+"$SCRIPT_DIR/save_wifi_args.sh" "$ssid" "$psk"
 
 echo "saved Wi-Fi config:"
 echo "  SSID=$ssid"

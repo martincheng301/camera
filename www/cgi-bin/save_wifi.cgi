@@ -1,4 +1,4 @@
 #!/bin/sh
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-exec "$SCRIPT_DIR/scripts/save_wifi.sh"
+BACKEND_DIR=${BACKEND_DIR:-/userdata/ap_test/scripts}
+exec "$BACKEND_DIR/save_wifi.sh"

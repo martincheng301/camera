@@ -38,11 +38,16 @@ UDHCPD_LEASE_FILE="$RUNTIME_DIR/udhcpd.leases"
 HTTPD_PID_FILE="$RUNTIME_DIR/httpd.pid"
 WPA_SUPPLICANT_PID_FILE="$RUNTIME_DIR/wpa_supplicant.pid"
 UDHCPC_PID_FILE="$RUNTIME_DIR/udhcpc.pid"
+RECORD_STATE_FILE="$RUNTIME_DIR/record.state"
+RECORD_PID_FILE="$RUNTIME_DIR/record.pid"
 DHCP_BACKEND=""
 
 CFG80211_MODULE=${CFG80211_MODULE:-/oem/usr/ko/cfg80211.ko}
 AIC8800_BSP_MODULE=${AIC8800_BSP_MODULE:-/oem/usr/ko/aic8800_bsp.ko}
 AIC8800_FDRV_MODULE=${AIC8800_FDRV_MODULE:-/oem/usr/ko/aic8800_fdrv.ko}
+RECORD_START_CMD=${RECORD_START_CMD:-}
+RECORD_STOP_CMD=${RECORD_STOP_CMD:-}
+RECORD_STATUS_CMD=${RECORD_STATUS_CMD:-}
 
 log() {
     printf '%s %s\n' "[ap]" "$*"
@@ -434,4 +439,95 @@ clear_iface_addr() {
         ip addr flush dev "$WLAN_IFACE" || true
         ip link set "$WLAN_IFACE" down || true
     fi
+}
+
+get_network_mode() {
+    if verify_iface_has_ip; then
+        printf 'ap'
+        return
+    fi
+
+    if command -v ifconfig >/dev/null 2>&1; then
+        if ifconfig "$WLAN_IFACE" | grep -q "inet addr:"; then
+            printf 'sta'
+            return
+        fi
+    elif command -v ip >/dev/null 2>&1; then
+        if ip addr show dev "$WLAN_IFACE" | grep -q "inet "; then
+            printf 'sta'
+            return
+        fi
+    fi
+
+    printf 'idle'
+}
+
+get_iface_ipv4() {
+    if command -v ifconfig >/dev/null 2>&1; then
+        ifconfig "$WLAN_IFACE" | sed -n 's/.*inet addr:\([0-9.]*\).*/\1/p' | head -n 1
+        return
+    fi
+
+    if command -v ip >/dev/null 2>&1; then
+        ip -4 addr show dev "$WLAN_IFACE" | sed -n 's/.*inet \([0-9.]*\)\/.*/\1/p' | head -n 1
+    fi
+}
+
+is_recording() {
+    if [ -f "$RECORD_PID_FILE" ]; then
+        pid=$(cat "$RECORD_PID_FILE" 2>/dev/null || true)
+        if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        rm -f "$RECORD_PID_FILE"
+    fi
+
+    [ -f "$RECORD_STATE_FILE" ] && grep -q '^recording=1$' "$RECORD_STATE_FILE"
+}
+
+write_record_state() {
+    state="$1"
+    ensure_runtime_dir
+    printf 'recording=%s\n' "$state" >"$RECORD_STATE_FILE"
+}
+
+start_recording() {
+    ensure_runtime_dir
+
+    if is_recording; then
+        log "recording already active"
+        return 0
+    fi
+
+    if [ -n "$RECORD_START_CMD" ]; then
+        log "starting recording with custom command"
+        sh -c "$RECORD_START_CMD" >/dev/null 2>&1 &
+        echo "$!" >"$RECORD_PID_FILE"
+    fi
+
+    write_record_state 1
+}
+
+stop_recording() {
+    if [ -n "$RECORD_STOP_CMD" ]; then
+        log "stopping recording with custom command"
+        sh -c "$RECORD_STOP_CMD" >/dev/null 2>&1 || true
+    fi
+
+    stop_by_pidfile "$RECORD_PID_FILE"
+    write_record_state 0
+}
+
+get_recording_status() {
+    if [ -n "$RECORD_STATUS_CMD" ]; then
+        sh -c "$RECORD_STATUS_CMD"
+        return
+    fi
+
+    if is_recording; then
+        printf 'recording'
+        return
+    fi
+
+    printf 'idle'
 }

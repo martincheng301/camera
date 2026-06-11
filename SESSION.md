@@ -2,7 +2,7 @@
 
 ## Current Objective
 
-Validate the new Stage 5 boot-time network state machine on the real board.
+Validate the new Stage 7 minimal HTTP control channel on the real board.
 
 ## Current Status
 
@@ -17,6 +17,7 @@ Validate the new Stage 5 boot-time network state machine on the real board.
   - STA start/stop helper scripts
 - Stage 4 code is now implemented in the repository.
 - Stage 5 boot entry now exists as `boot_network.sh`.
+- Stage 7 minimal control endpoints now exist for status and record control.
 
 ## Confirmed Board Assumptions
 
@@ -30,31 +31,31 @@ Validate the new Stage 5 boot-time network state machine on the real board.
 
 ## Immediate Milestone
 
-Stage 5 must now be validated end-to-end on the real board.
+Stage 7 minimal control must now be validated end-to-end on the real board.
 
 Definition:
 
-1. boot with valid saved config enters STA
-2. boot with missing config enters AP
-3. boot with bad config falls back from STA to AP
-4. AP and STA paths remain restartable after repeated boots
+1. phone or browser can open `/control.html`
+2. `/cgi-bin/status.cgi` returns current mode, IP, and recording state
+3. `/cgi-bin/record.cgi?action=start` marks recording active
+4. `/cgi-bin/record.cgi?action=stop` marks recording inactive
+5. board-specific record commands can later be attached to the hook variables
 
 ## Recommended Next Work
 
-1. push `boot_network.sh` and `scripts/boot_network.sh` to the board
-2. test valid-config boot path
-3. test missing-config AP fallback path
-4. test bad-config STA-failure fallback path
+1. push the new Stage 7 scripts and CGI files to the board
+2. deploy static pages and CGI files into the board nginx web root
+3. confirm status output over AP and STA paths
+4. attach real board recording commands to the Stage 7 hooks
 
 ## Board-Side Validation Checklist
 
-- run `sh /userdata/ap_test/boot_network.sh`
-- with valid config, confirm `wlan0` gets a LAN IP
-- with valid config, verify connectivity to gateway or known reachable host
-- remove or rename Wi-Fi config and rerun `boot_network.sh`
-- confirm AP fallback appears as `CameraBoard_Setup`
-- restore config, inject a bad password, rerun `boot_network.sh`
-- confirm STA fails and AP fallback appears
+- open `http://<board-ip>/control.html`
+- open `http://<board-ip>/cgi-bin/status.cgi`
+- run `http://<board-ip>/cgi-bin/record.cgi?action=start`
+- run `http://<board-ip>/cgi-bin/record.cgi?action=status`
+- run `http://<board-ip>/cgi-bin/record.cgi?action=stop`
+- verify `runtime/record.state` changes as expected
 
 ## Important Runtime Paths
 

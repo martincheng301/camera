@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Camera Board Control</title>
+  <style>
+    :root {
+      --bg: #f5f1e8;
+      --panel: #fffaf3;
+      --ink: #1f1d19;
+      --muted: #676157;
+      --border: #d9cfbf;
+      --accent: #0f766e;
+      --accent-2: #155e75;
+    }
+    body {
+      margin: 0;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #f8f3e8, var(--bg));
+      color: var(--ink);
+    }
+    .wrap {
+      max-width: 460px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 16px 38px rgba(31, 29, 25, 0.08);
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+    }
+    p {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    button {
+      flex: 1;
+      padding: 12px 14px;
+      border: 0;
+      border-radius: 999px;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+    pre {
+      margin: 18px 0 0;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--muted);
+      white-space: pre-wrap;
+      min-height: 96px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Device Control</h1>
+      <p>Use the board's minimal HTTP control channel to inspect state and trigger recording actions.</p>
+      <div class="row">
+        <button id="status-btn" type="button">Refresh Status</button>
+        <button id="start-btn" type="button">Start Record</button>
+        <button id="stop-btn" type="button">Stop Record</button>
+      </div>
+      <pre id="output">Ready.</pre>
+    </div>
+  </div>
+  <script>
+    const output = document.getElementById('output');
+
+    async function call(path) {
+      output.textContent = 'Loading...';
+      const response = await fetch(path);
+      output.textContent = await response.text();
+    }
+
+    document.getElementById('status-btn').addEventListener('click', () => call('/cgi-bin/status.cgi'));
+    document.getElementById('start-btn').addEventListener('click', () => call('/cgi-bin/record.cgi?action=start'));
+    document.getElementById('stop-btn').addEventListener('click', () => call('/cgi-bin/record.cgi?action=stop'));
+  </script>
+</body>
+</html>

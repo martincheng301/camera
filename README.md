@@ -20,15 +20,21 @@ Bring up a Wi-Fi AP so a phone can:
 - `scripts/start_ap.sh`: start AP
 - `scripts/boot_ap.sh`: load AIC8800 modules then start AP
 - `scripts/save_wifi.sh`: save Wi-Fi provisioning data
+- `scripts/save_wifi_args.sh`: shared Wi-Fi save backend
 - `scripts/save_wifi_cli.sh`: save Wi-Fi provisioning data from shell
 - `scripts/start_config_server.sh`: start config page only
 - `scripts/stop_ap.sh`: stop AP
+- `scripts/device_status.sh`: status backend
+- `scripts/control_record.sh`: record control backend
 - `scripts/lib.sh`: shared helpers
 - `conf/hostapd/hostapd.conf`: hostapd template
 - `conf/udhcpd/udhcpd.conf`: BusyBox DHCP template
 - `conf/dnsmasq/dnsmasq.conf`: fallback DHCP template
 - `www/index.html`: provisioning page
+- `www/control.html`: control page
 - `www/cgi-bin/save_wifi.cgi`: CGI entry
+- `www/cgi-bin/status.cgi`: status CGI entry
+- `www/cgi-bin/record.cgi`: record CGI entry
 - `runtime/`: generated configs and pid files
 
 ## Expected tools on board
@@ -37,7 +43,7 @@ Bring up a Wi-Fi AP so a phone can:
 - `ifconfig`
 - `route`
 - `udhcpd` preferred, or `dnsmasq` as fallback
-- `httpd`
+- `nginx` with `fcgiwrap` for `/cgi-bin/`
 
 ## Default network
 
@@ -98,7 +104,20 @@ The startup flow is:
 4. assign `192.168.4.1`
 5. start `hostapd`
 6. start `udhcpd`
-7. start `httpd`
+7. rely on board `nginx` for config page and CGI
+
+The minimal Stage 7 control page is:
+
+```sh
+http://<board-ip>/control.html
+```
+
+Available control endpoints:
+
+- `/cgi-bin/status.cgi`
+- `/cgi-bin/record.cgi?action=start`
+- `/cgi-bin/record.cgi?action=stop`
+- `/cgi-bin/record.cgi?action=status`
 
 ## Stop
 
@@ -121,6 +140,13 @@ If `httpd` is not available on the board, use CLI provisioning:
 ```sh
 sh /userdata/ap_test/scripts/save_wifi_cli.sh TestAP 12345678
 ```
+
+On boards using `nginx + fcgiwrap`, deploy:
+
+- static pages to `/oem/usr/www/`
+- CGI entries to `/oem/usr/www/cgi-bin/`
+
+The CGI entries should call scripts under `/userdata/ap_test/scripts/`.
 
 ## Override defaults
 
@@ -160,4 +186,21 @@ CFG80211_MODULE=/path/cfg80211.ko \
 AIC8800_BSP_MODULE=/path/aic8800_bsp.ko \
 AIC8800_FDRV_MODULE=/path/aic8800_fdrv.ko \
 sh ./boot_ap.sh
+```
+
+## Stage 7 Hooking
+
+The Stage 7 control channel is intentionally generic.
+
+By default:
+
+- status is read from current network state plus `runtime/record.state`
+- record start/stop only update local state
+
+To connect real board commands, override:
+
+```sh
+RECORD_START_CMD='your_start_command'
+RECORD_STOP_CMD='your_stop_command'
+RECORD_STATUS_CMD='your_status_command'
 ```
