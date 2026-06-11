@@ -39,6 +39,8 @@ fi
 
 if "$SCRIPT_DIR/save_wifi_args.sh" "$ssid" "$psk"; then
     printf 'OK: saved Wi-Fi config for SSID=%s\n' "$ssid"
+    printf 'OK: board will switch to STA shortly\n'
+    schedule_sta_after_provision
     exit 0
 fi
 

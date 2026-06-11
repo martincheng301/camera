@@ -2,7 +2,7 @@
 
 ## Current Objective
 
-Validate the new Stage 7 minimal HTTP control channel on the real board.
+Capture the verified board-native Stage 7 interfaces in project context and prepare for the next storage-path stage.
 
 ## Current Status
 
@@ -18,6 +18,8 @@ Validate the new Stage 7 minimal HTTP control channel on the real board.
 - Stage 4 code is now implemented in the repository.
 - Stage 5 boot entry now exists as `boot_network.sh`.
 - Stage 7 minimal control endpoints now exist for status and record control.
+- CGI provisioning now schedules a delayed background STA switch after save.
+- Board-native record control and RTSP preview paths are now verified.
 
 ## Confirmed Board Assumptions
 
@@ -31,31 +33,26 @@ Validate the new Stage 7 minimal HTTP control channel on the real board.
 
 ## Immediate Milestone
 
-Stage 7 minimal control must now be validated end-to-end on the real board.
+Stage 7 board-native control and preview paths are validated.
 
 Definition:
 
-1. phone or browser can open `/control.html`
-2. `/cgi-bin/status.cgi` returns current mode, IP, and recording state
-3. `/cgi-bin/record.cgi?action=start` marks recording active
-4. `/cgi-bin/record.cgi?action=stop` marks recording inactive
-5. board-specific record commands can later be attached to the hook variables
+1. record control works through native HTTP endpoints
+2. RTSP substream preview works through `/live/1`
+3. recordings are written under `/userdata/video0`
 
 ## Recommended Next Work
 
-1. push the new Stage 7 scripts and CGI files to the board
-2. deploy static pages and CGI files into the board nginx web root
-3. confirm status output over AP and STA paths
-4. attach real board recording commands to the Stage 7 hooks
+1. update `TECHNICAL_ROUTE.md` with verified Stage 7 interfaces
+2. begin Stage 6 storage-path migration from `/userdata/video0` to `/mnt/sdcard/record/`
+3. define SD card detection and fallback behavior
 
 ## Board-Side Validation Checklist
 
-- open `http://<board-ip>/control.html`
-- open `http://<board-ip>/cgi-bin/status.cgi`
-- run `http://<board-ip>/cgi-bin/record.cgi?action=start`
-- run `http://<board-ip>/cgi-bin/record.cgi?action=status`
-- run `http://<board-ip>/cgi-bin/record.cgi?action=stop`
-- verify `runtime/record.state` changes as expected
+- `PUT /cgi-bin/entry.cgi/event/start-record` returns `{}`
+- `PUT /cgi-bin/entry.cgi/event/stop-record` returns `{}`
+- `rtsp://<board-ip>/live/1` previews successfully
+- recordings appear under `/userdata/video0`
 
 ## Important Runtime Paths
 

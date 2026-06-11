@@ -119,6 +119,14 @@ Available control endpoints:
 - `/cgi-bin/record.cgi?action=stop`
 - `/cgi-bin/record.cgi?action=status`
 
+Verified board-native Stage 7 interfaces:
+
+- start record: `PUT /cgi-bin/entry.cgi/event/start-record`
+- stop record: `PUT /cgi-bin/entry.cgi/event/stop-record`
+- typical response: `{}`
+- preview stream: `rtsp://<board-ip>/live/1`
+- recording output path: `/userdata/video0`
+
 ## Stop
 
 ```sh
@@ -134,6 +142,15 @@ Provisioning writes:
 /userdata/wifi/ap_provision.conf
 /userdata/wifi/wpa_supplicant.conf
 ```
+
+On successful CGI provisioning, the board schedules a delayed STA switch.
+Default behavior:
+
+- return HTTP success first
+- wait `3` seconds
+- run `scripts/start_sta.sh` in background
+
+The delay can be adjusted with `PROVISION_STA_DELAY`.
 
 If `httpd` is not available on the board, use CLI provisioning:
 
@@ -204,3 +221,5 @@ RECORD_START_CMD='your_start_command'
 RECORD_STOP_CMD='your_stop_command'
 RECORD_STATUS_CMD='your_status_command'
 ```
+
+For this board, prefer the native HTTP record endpoints and RTSP preview path above instead of the generic placeholder record hooks.

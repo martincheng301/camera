@@ -104,6 +104,7 @@ Success condition:
 - Stage 4: STA scripts implemented
 - Stage 5: minimal boot state machine implemented
 - Stage 7: minimal HTTP control channel implemented
+- Stage 7: board-native record control and RTSP substream verified
 
 ## Standard Network Defaults
 
@@ -186,6 +187,14 @@ Current repository status:
 - `scripts/device_status.sh` reports current mode, IP, and recording state
 - `scripts/control_record.sh` implements minimal start/stop/status actions
 - `scripts/lib.sh` contains AP-to-STA cleanup and wait-for-IP logic
+
+Verified board-native media/control paths:
+
+- record start: `PUT /cgi-bin/entry.cgi/event/start-record`
+- record stop: `PUT /cgi-bin/entry.cgi/event/stop-record`
+- HTTP response: `{}`
+- RTSP preview: `rtsp://<board-ip>/live/1`
+- recording output directory: `/userdata/video0`
 
 ## Known Failure Patterns
 

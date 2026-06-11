@@ -40,6 +40,7 @@ WPA_SUPPLICANT_PID_FILE="$RUNTIME_DIR/wpa_supplicant.pid"
 UDHCPC_PID_FILE="$RUNTIME_DIR/udhcpc.pid"
 RECORD_STATE_FILE="$RUNTIME_DIR/record.state"
 RECORD_PID_FILE="$RUNTIME_DIR/record.pid"
+PROVISION_STA_LOG="$RUNTIME_DIR/provision_sta.log"
 DHCP_BACKEND=""
 
 CFG80211_MODULE=${CFG80211_MODULE:-/oem/usr/ko/cfg80211.ko}
@@ -48,6 +49,8 @@ AIC8800_FDRV_MODULE=${AIC8800_FDRV_MODULE:-/oem/usr/ko/aic8800_fdrv.ko}
 RECORD_START_CMD=${RECORD_START_CMD:-}
 RECORD_STOP_CMD=${RECORD_STOP_CMD:-}
 RECORD_STATUS_CMD=${RECORD_STATUS_CMD:-}
+PROVISION_AUTO_STA=${PROVISION_AUTO_STA:-1}
+PROVISION_STA_DELAY=${PROVISION_STA_DELAY:-3}
 
 log() {
     printf '%s %s\n' "[ap]" "$*"
@@ -530,4 +533,19 @@ get_recording_status() {
     fi
 
     printf 'idle'
+}
+
+schedule_sta_after_provision() {
+    if [ "$PROVISION_AUTO_STA" != "1" ]; then
+        log "auto STA switch after provisioning is disabled"
+        return 0
+    fi
+
+    ensure_runtime_dir
+    log "scheduling STA switch ${PROVISION_STA_DELAY}s after provisioning"
+
+    (
+        sleep "$PROVISION_STA_DELAY"
+        "$PROJECT_DIR/scripts/start_sta.sh" >"$PROVISION_STA_LOG" 2>&1
+    ) </dev/null >/dev/null 2>&1 &
 }

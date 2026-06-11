@@ -412,6 +412,48 @@ Success means:
 - video preview is available
 - control and video do not block each other
 
+### Verified board-native interfaces
+
+Current confirmed board behavior:
+
+- start record:
+
+```sh
+PUT /cgi-bin/entry.cgi/event/start-record
+```
+
+- stop record:
+
+```sh
+PUT /cgi-bin/entry.cgi/event/stop-record
+```
+
+- typical HTTP response:
+
+```sh
+{}
+```
+
+- RTSP substream preview:
+
+```sh
+rtsp://<board-ip>/live/1
+```
+
+- current recording output path:
+
+```sh
+/userdata/video0
+```
+
+### Current Stage 7 conclusion
+
+For this board, the preferred Stage 7 path is:
+
+- control channel: native HTTP endpoints
+- preview channel: RTSP substream `/live/1`
+- recording verification: inspect `/userdata/video0`
+
 ## Stage 8: App Integration
 
 ### Goal
