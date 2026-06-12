@@ -127,6 +127,8 @@ Verified board-native Stage 7 interfaces:
 - preview stream: `rtsp://<board-ip>/live/1`
 - recording output path: `/userdata/video0`
 
+`www/control.html` is a basic browser test page that directly calls the verified native record endpoints.
+
 ## Stop
 
 ```sh
