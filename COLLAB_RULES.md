@@ -19,6 +19,19 @@
 - Treat context files as persistence and recovery tools, not mandatory per-turn inputs during the same live session.
 - Prefer the smallest necessary context read instead of re-reading everything.
 
+## First Principle: Explain the Why
+
+Every change, every problem diagnosis, every design decision must include a clear explanation of the underlying principle or root cause. Do not stop at "what to do" ? explain why it works, why it broke, or why one approach is chosen over another.
+
+This applies to:
+
+- Bug fixes: explain the root cause, not just the patch.
+- Design decisions: explain the tradeoffs and reasoning.
+- Script or config changes: explain what the change does at the mechanism level.
+- Test procedures: explain what each step validates and what failure looks like.
+
+A fix without reasoning is a future bug waiting to resurface.
+
 ## Preferred Read Order
 
 When a context refresh is needed, prefer this order:

@@ -1,5 +1,7 @@
 #!/bin/sh
 
+printf 'Content-Type: text/plain\r\n\r\n'
+
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -24,8 +26,6 @@ psk_encoded=$(get_query_value psk || true)
 
 ssid=$(urldecode "${ssid_encoded:-}")
 psk=$(urldecode "${psk_encoded:-}")
-
-printf 'Content-Type: text/plain\r\n\r\n'
 
 if [ -z "$ssid" ]; then
     printf 'ERROR: missing ssid\n'

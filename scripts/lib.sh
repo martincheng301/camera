@@ -186,6 +186,7 @@ start_httpd() {
     return 1
 }
 
+
 start_wpa_supplicant() {
     require_cmd wpa_supplicant
     ensure_wpa_ctrl_dir

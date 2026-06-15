@@ -14,6 +14,7 @@ stop_by_pidfile "$WPA_SUPPLICANT_PID_FILE"
 kill_process_if_running udhcpc
 kill_process_if_running wpa_supplicant
 
+
 clear_iface_addr
 
 log "STA stopped"
