@@ -1,4 +1,4 @@
-# Camera Board Technical Route
+﻿# Camera Board Technical Route
 
 ## Scope
 
@@ -497,16 +497,29 @@ Recommended development priority:
 8. SD card recording path
 9. `eth0` static IP persistence
 
-## Immediate Next Step
 
-The current recommended next milestone is:
+## Stage Completion Status
 
-### Build minimal AP provisioning
+| Stage | Description | Status |
+|-------|-------------|--------|
+| 0 | Wi-Fi driver load | Done |
+| 1 | AP bring-up | Done |
+| 2 | AP stability | Done |
+| 3 | Minimal provisioning (form + CGI save) | Done |
+| 4 | STA networking | Done |
+| 5 | Boot-time state machine | Done |
+| 6 | Storage path migration (SD card) | Not started |
+| 7 | Control + video transport | Done |
+| 8 | App integration | Not started |
 
-Implement:
+## Board Web Server
 
-1. a tiny HTTP page on `192.168.4.1`
-2. Wi-Fi credential submit handler
-3. persistent config save script
+The board runs nginx + fcgiwrap (NOT BusyBox httpd). Config at `/oem/usr/etc/nginx/nginx.conf`. Symlink `/etc/nginx/nginx.conf` -> `/oem/usr/etc/nginx/nginx.conf` eliminates manual `-c` parameter.
 
-Do not move to app integration before this step is stable.
+## Verified Native Interfaces
+
+1. Parameter config: `PUT /cgi-bin/entry.cgi/video/0` (JSON body with resolution, bitrate, codec, GOP, etc.)
+2. Record control: `PUT /cgi-bin/entry.cgi/event/start-record?duration=60&stream=0` / `stop-record` (response `{}`)
+3. RTSP preview: `rtsp://<ip>/live/1`
+4. Recording output: `/userdata/video0`
+5. Video file browse: `http://<ip>/cgi-bin/videos` -> download via port 8080

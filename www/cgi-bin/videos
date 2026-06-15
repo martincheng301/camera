@@ -1,0 +1,40 @@
+#!/bin/sh
+printf 'Content-Type: text/html\r\n\r\n'
+cat <<'HTML'
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Videos</title>
+<style>
+body{font-family:monospace;max-width:800px;margin:20px auto;padding:0 16px;color:#222;background:#fafafa}
+h2{margin-bottom:4px}
+.info{color:#888;font-size:13px;margin-bottom:16px}
+ul{list-style:none;padding:0}
+li{padding:8px 0;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+a{color:#184f78;text-decoration:none;font-weight:700}
+a:hover{text-decoration:underline}
+.size{color:#999;font-size:13px}
+.refresh{float:right;font-size:13px;color:#999}
+</style></head><body>
+<h2>Video Files <span class="refresh">auto-refresh 10s</span></h2>
+<p class="info">/userdata/video0</p>
+<ul>
+HTML
+
+for f in /userdata/video0/*; do
+    [ -f "$f" ] || continue
+    name=$(basename "$f")
+    size=$(ls -lh "$f" | awk '{print $5}')
+    cat <<ITEM
+<li><a href="#" class="dl" data-name="$name">$name</a> <span class="size">$size</span></li>
+ITEM
+done
+
+cat <<'HTML'
+</ul>
+<script>
+document.querySelectorAll('.dl').forEach(function(a){
+    a.href='http://'+location.hostname+':8080/'+a.dataset.name;
+});
+setTimeout(function(){location.reload()},10000);
+</script>
+</body></html>
+HTML
