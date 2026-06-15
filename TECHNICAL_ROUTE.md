@@ -230,7 +230,7 @@ Board side behavior:
 
 ### Suggested files
 
-- `/userdata/ap_test/www/index.html`
+- `/userdata/ap_test/www/provision.html`
 - `/userdata/ap_test/scripts/save_wifi.sh`
 - `/userdata/ap_test/scripts/start_config_server.sh`
 

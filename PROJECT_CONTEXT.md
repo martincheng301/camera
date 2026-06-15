@@ -88,7 +88,7 @@ Success condition:
 - `conf/hostapd/hostapd.conf`: AP config template
 - `conf/udhcpd/udhcpd.conf`: DHCP config template
 - `conf/dnsmasq/dnsmasq.conf`: DHCP fallback template
-- `www/index.html`: provisioning page
+- `www/provision.html: Wi-Fi provisioning form
 - `www/cgi-bin/save_wifi.cgi`: CGI save entry
 - `www/control.html`: Stage 7 control page
 - `www/cgi-bin/status.cgi`: CGI status entry

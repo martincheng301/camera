@@ -25,8 +25,7 @@ stabilize_ap_ip 4 1
 
 start_dhcp_server
 
-log "web UI is expected to be served by the board's nginx/fcgiwrap stack"
-show_http_status
+kill_process_if_running httpd; sleep 1; start_httpd
 
 log "interface status after AP setup"
 show_iface_status

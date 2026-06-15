@@ -30,7 +30,7 @@ Bring up a Wi-Fi AP so a phone can:
 - `conf/hostapd/hostapd.conf`: hostapd template
 - `conf/udhcpd/udhcpd.conf`: BusyBox DHCP template
 - `conf/dnsmasq/dnsmasq.conf`: fallback DHCP template
-- `www/index.html`: provisioning page
+- `www/provision.html: Wi-Fi provisioning form
 - `www/control.html`: control page
 - `www/cgi-bin/save_wifi.cgi`: CGI entry
 - `www/cgi-bin/status.cgi`: status CGI entry
