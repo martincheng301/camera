@@ -10,22 +10,12 @@ _json_str() {
     printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-# Detect recording by checking whether the newest file in VIDEO_DIR
-# has been modified within RECORD_THRESHOLD seconds.  This works
-# regardless of which API (native entry.cgi or our record.cgi)
-# triggered the recording.
-RECORD_THRESHOLD=5
-
+# A process holding an fd open inside VIDEO_DIR means the file is
+# still being written (i.e. recording is active).  This is agnostic
+# to whether the recording was triggered by native entry.cgi or
+# our control_record.sh.
 _is_recording() {
-    newest=$(ls -t "$VIDEO_DIR"/* 2>/dev/null | head -n 1)
-    [ -z "$newest" ] && return 1
-    [ ! -f "$newest" ] && return 1
-    file_mtime=$(date -r "$newest" +%s 2>/dev/null || echo 0)
-    now=$(date +%s 2>/dev/null || echo 0)
-    [ "$now" -gt 0 ] || return 1
-    [ "$file_mtime" -gt 0 ] || return 1
-    age=$(( now - file_mtime ))
-    [ "$age" -lt "$RECORD_THRESHOLD" ]
+    ls -l /proc/[0-9]*/fd/* 2>/dev/null | grep -q "$VIDEO_DIR/"
 }
 
 if _is_recording; then
