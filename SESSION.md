@@ -1,8 +1,8 @@
-﻿# Session Notes
+# Session Notes
 
 ## Current Objective
 
-Wi-Fi-side backend validation is complete. The board's native HTTP endpoints (`PUT /cgi-bin/entry.cgi/video/0` for parameter config, `PUT /cgi-bin/entry.cgi/event/start-record` for record control) respond identically over Wi-Fi and Ethernet.
+Implement automatic file transfer from board to phone via HTTP + JSON listing CGI, so the phone can discover and pull recordings without manual steps.
 
 ## Current Status
 
@@ -110,3 +110,4 @@ When resuming work in a new session:
 2. read `TECHNICAL_ROUTE.md` for roadmap
 3. check board: is nginx alive on 80+8080? is filesystem intact?
 4. confirm Wi-Fi both AP and STA modes work
+

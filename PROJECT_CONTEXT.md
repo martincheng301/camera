@@ -30,7 +30,7 @@ The priority order from the technical route is:
 8. SD card recording path
 9. `eth0` static IP persistence
 
-Current active priority is item 6: control protocol, with Stage 7 minimal HTTP control now implemented.
+Current active priority: file transfer (list + download + delete) complete. Next: Stage 6 (SD card) or Stage 8 (app integration).
 
 ## Board Environment
 
@@ -214,3 +214,5 @@ When continuing development:
 3. inspect current script behavior in `scripts/`
 4. test Stage 4 on board and record the exact observed failure point
 5. if Stage 4 passes reliably, start Stage 5 boot-time state machine work
+
+

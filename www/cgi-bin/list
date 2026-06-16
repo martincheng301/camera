@@ -1,0 +1,61 @@
+#!/bin/sh
+# GET /cgi-bin/list
+# {"dir":"/userdata/video0","recording":false,"files":[{"name":"...","size":...,"mtime":...},...]}
+
+printf 'Content-Type: application/json\r\n\r\n'
+
+VIDEO_DIR="/userdata/video0"
+
+_json_str() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+# Detect recording by checking whether the newest file in VIDEO_DIR
+# has been modified within RECORD_THRESHOLD seconds.  This works
+# regardless of which API (native entry.cgi or our record.cgi)
+# triggered the recording.
+RECORD_THRESHOLD=5
+
+_is_recording() {
+    newest=$(ls -t "$VIDEO_DIR"/* 2>/dev/null | head -n 1)
+    [ -z "$newest" ] && return 1
+    [ ! -f "$newest" ] && return 1
+    file_mtime=$(date -r "$newest" +%s 2>/dev/null || echo 0)
+    now=$(date +%s 2>/dev/null || echo 0)
+    [ "$now" -gt 0 ] || return 1
+    [ "$file_mtime" -gt 0 ] || return 1
+    age=$(( now - file_mtime ))
+    [ "$age" -lt "$RECORD_THRESHOLD" ]
+}
+
+if _is_recording; then
+    recording=true
+else
+    recording=false
+fi
+
+printf '{"dir":"'
+_json_str "$VIDEO_DIR"
+printf '","recording":%s,"files":[' "$recording"
+
+first=1
+for f in "$VIDEO_DIR"/*; do
+    [ -f "$f" ] || continue
+
+    name=$(basename "$f")
+    size=$(wc -c < "$f" 2>/dev/null | tr -d ' ')
+    [ -n "$size" ] || size=0
+    mtime=$(date -r "$f" +%s 2>/dev/null || echo 0)
+
+    if [ "$first" -eq 1 ]; then
+        first=0
+    else
+        printf ','
+    fi
+
+    printf '{"name":"'
+    _json_str "$name"
+    printf '","size":%s,"mtime":%s}' "$size" "$mtime"
+done
+
+printf ']}\n'

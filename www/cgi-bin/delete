@@ -1,0 +1,55 @@
+#!/bin/sh
+# POST /cgi-bin/delete?name=<filename>
+# {"ok":true} | {"ok":false,"error":"..."}
+
+printf 'Content-Type: application/json\r\n\r\n'
+
+VIDEO_DIR="/userdata/video0"
+
+_json_str() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+json_ok() {
+    printf '{"ok":true}\n'
+    exit 0
+}
+
+json_err() {
+    msg="$1"
+    printf '{"ok":false,"error":"'
+    _json_str "$msg"
+    printf '"}\n'
+    exit 0
+}
+
+raw="${QUERY_STRING:-}"
+
+_get_qs() {
+    key="$1"
+    printf '%s' "$raw" | tr '&' '\n' | sed -n "s/^$key=//p" | head -n 1
+}
+
+name=$(_get_qs name)
+
+if [ -z "$name" ]; then
+    json_err "missing parameter: name"
+fi
+
+case "$name" in
+    */*|*\\*|*..*)
+        json_err "invalid filename"
+        ;;
+esac
+
+filepath="$VIDEO_DIR/$name"
+
+if [ ! -f "$filepath" ]; then
+    json_err "file not found"
+fi
+
+if rm -f "$filepath" 2>/dev/null; then
+    json_ok
+else
+    json_err "delete failed"
+fi

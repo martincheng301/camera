@@ -1,4 +1,4 @@
-﻿# Camera Board Technical Route
+# Camera Board Technical Route
 
 ## Scope
 
@@ -454,6 +454,58 @@ For this board, the preferred Stage 7 path is:
 - preview channel: RTSP substream `/live/1`
 - recording verification: inspect `/userdata/video0`
 
+## Stage FT: File Transfer (Phone Pull)
+
+### Goal
+
+Enable the phone to programmatically discover and pull recordings from the board without manual steps.
+
+### Approach
+
+HTTP-based, reusing existing nginx infrastructure. No additional daemons.
+
+### Endpoints
+
+1. **List API** (CGI on port 80):
+   - `GET /cgi-bin/list` returns JSON file metadata:
+   ```json
+   {"dir":"/userdata/video0","files":[{"name":"20260616_143000.mp4","size":52428800,"mtime":1687435200},...]}
+   ```
+   - Fields: `name` (filename), `size` (bytes), `mtime` (Unix timestamp)
+
+2. **File download** (nginx on port 8080):
+   - `GET http://<board-ip>:8080/<filename>` serves raw file with `sendfile on` (zero-copy)
+
+### Phone-Side Flow
+
+1. Call `GET /cgi-bin/list` to enumerate board recordings
+2. Diff against local cache: skip files already downloaded (match on name + size)
+3. For each missing/newer file: `GET http://<ip>:8080/<filename>`, stream to local storage
+4. After successful download: POST /cgi-bin/delete?name=<filename> to free board storage
+4. CORS headers on port 80 allow cross-origin fetch from any host
+
+### Why not TFTP / SCP
+
+| Method | Verdict |
+|--------|---------|
+| TFTP | UDP on Wi-Fi unreliable; no directory listing in protocol; phone-side libraries niche |
+| SCP/SSH | Requires auth management (keys/password); sshd overhead on BusyBox; phone-side SSH library complexity |
+| HTTP | Already deployed (nginx 80+8080); CORS configured; standard HTTP client on any phone platform; Range header for resume |
+
+### Implementation
+
+- `www/cgi-bin/list`: BusyBox-compatible shell CGI, follows Content-Type-first rule
+- `nginx.conf` port 8080 `server` block: unchanged, already serves `/userdata/video0/`
+- `nginx.conf` port 80 CORS headers: unchanged, already permissive
+
+### Validation
+
+Success means:
+- `curl http://<ip>/cgi-bin/list` returns valid JSON with file entries
+- empty directory returns `{"files":[]}`
+- Wget/curl can download a file from port 8080
+- phone browser's `fetch()` can call `/cgi-bin/list` without CORS errors
+
 ## Stage 8: App Integration
 
 ### Goal
@@ -523,3 +575,4 @@ The board runs nginx + fcgiwrap (NOT BusyBox httpd). Config at `/oem/usr/etc/ngi
 3. RTSP preview: `rtsp://<ip>/live/1`
 4. Recording output: `/userdata/video0`
 5. Video file browse: `http://<ip>/cgi-bin/videos` -> download via port 8080
+
