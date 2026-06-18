@@ -1,632 +1,442 @@
-# Camera Board Technical Route
+﻿# Camera Board Functional Reference
 
-## Scope
+Interface and behaviour reference for handover / app integration.
+Organised by feature, not by development stage.
 
-This document is the step-by-step implementation route for the camera board project.
+---
 
-Current target:
+## 1. Wi-Fi Driver Load
 
-- phone connects to board AP
-- board supports later Wi-Fi provisioning
-- board supports later STA networking
-- board supports later control + video streaming
+**What:** Load AIC8800 kernel modules so wlan0 appears.
 
-This route is ordered from simple validation to full integration.
+**Modules:** /oem/usr/ko/cfg80211.ko, /oem/usr/ko/aic8800_bsp.ko, /oem/usr/ko/aic8800_fdrv.ko
 
-## Stage 0: Baseline
+**Script:** lib.sh → ensure_wifi_driver().  Called by every network script at startup; idempotent (skips if wlan0 already exists).
 
-### Goal
+---
 
-Confirm the board can expose a usable Wi-Fi interface before touching AP, DHCP, or app integration.
+## 2. AP Mode
 
-### Actions
+**What:** Board creates hotspot CameraBoard_Setup with DHCP so a phone can connect.
 
-1. Identify Wi-Fi chipset and bus.
-2. Confirm driver modules exist.
-3. Manually load required modules.
-4. Confirm `wlan0` appears.
+**Trigger:**
 
-### Current board facts
+- Boot without saved Wi-Fi config, OR
+- STA connect fails → fallback to AP, OR
+- Manual: sh /userdata/ap_test/boot_network.sh
 
-- system style: BusyBox
-- Wi-Fi chip: AIC8800
-- module: BL-M8800DS2
-- bus: SDIO
-- driver modules:
-  - `/oem/usr/ko/cfg80211.ko`
-  - `/oem/usr/ko/aic8800_bsp.ko`
-  - `/oem/usr/ko/aic8800_fdrv.ko`
+**Network defaults:**
 
-### Validation
+| Item | Value |
+|------|-------|
+| SSID | CameraBoard_Setup |
+| Passphrase | 12345678 |
+| Board IP | 192.168.4.1 |
+| Netmask | 255.255.255.0 |
+| DHCP range | 192.168.4.10 - 192.168.4.100 |
+| Channel | 6 |
 
-Run:
+**Technical flow:**
+`
+boot_network.sh / start_ap.sh
+  │
+  ├─ ensure_wifi_driver()          — load AIC8800 modules if wlan0 missing
+  ├─ kill conflicting processes    — wpa_supplicant, hostapd, udhcpd, dnsmasq
+  ├─ reset wlan0                   — down, sleep 2s, up
+  ├─ iface_up_with_addr()          — assign 192.168.4.1
+  ├─ start_hostapd()               — hostapd -B -P runtime/hostapd.pid runtime/hostapd.conf
+  ├─ stabilize_ap_ip()             — re-apply IP if driver cleared it during AP mode switch
+  └─ start_dhcp_server()           — udhcpd preferred, dnsmasq fallback
+`
 
-```sh
-insmod /oem/usr/ko/cfg80211.ko
-insmod /oem/usr/ko/aic8800_bsp.ko
-insmod /oem/usr/ko/aic8800_fdrv.ko
-ifconfig -a
-```
+**Key files:** scripts/start_ap.sh, scripts/stop_ap.sh, conf/hostapd/hostapd.conf, conf/udhcpd/udhcpd.conf
 
-Success condition:
+---
 
-- `wlan0` exists
+## 3. Wi-Fi Provisioning
 
-### Common issues
+**What:** Phone sends router SSID + password to board while connected to camera AP.
 
-- `unknown symbol`
-  - usually missing dependency such as `cfg80211.ko`
-- no `wlan0`
-  - driver not loaded
-  - SDIO probe failed
-  - firmware missing
+**Entry point:**
+`
+GET http://192.168.4.1/cgi-bin/save_wifi.cgi?ssid=<SSID>&psk=<PASSWORD>
+`
+| Field | Description |
+|-------|-------------|
+| Method | **GET** (query string) |
+| ssid | Target router SSID |
+| psk | Router password (min 8 chars; omit for open networks) |
+| Response | OK: saved Wi-Fi config for SSID=<ssid> |
+| Response (fail) | ERROR: ... |
 
-## Stage 1: AP Bring-Up
+**Technical flow:**
+`
+GET /cgi-bin/save_wifi.cgi?ssid=X&psk=Y
+  │
+  └─ nginx → fcgiwrap → /oem/usr/www/cgi-bin/save_wifi.cgi
+       │
+       └─ exec /userdata/ap_test/scripts/save_wifi.sh
+            │
+            ├─ validate ssid present, psk length >= 8 if set
+            ├─ save_wifi_args.sh  →  write /userdata/wifi/wpa_supplicant.conf
+            ├─ print "OK" response
+            └─ schedule_sta_after_provision()  →  sleep 3s → start_sta.sh
+`
 
-### Goal
+**Output files:**
 
-Bring up a board AP so the phone can discover and connect to it.
+| File | Purpose |
+|------|---------|
+| /userdata/wifi/wpa_supplicant.conf | wpa_supplicant config (ctrl_interface + network block) |
+| /userdata/wifi/ap_provision.conf | Plaintext staging copy (SSID=... PSK=...) |
 
-### Current implementation
+**CGI Content-Type rule:** All CGI shell scripts must output Content-Type header BEFORE set -eu and BEFORE sourcing dependencies. Failure to do so → nginx returns 502 with no visible error.
 
-Files in `/userdata/ap_test`:
+---
 
-- `boot_ap.sh`
-- `start_ap.sh`
-- `scripts/boot_ap.sh`
-- `scripts/start_ap.sh`
-- `scripts/stop_ap.sh`
-- `scripts/lib.sh`
-- `conf/hostapd/hostapd.conf`
-- `conf/udhcpd/udhcpd.conf`
+## 4. STA Mode
 
-### Final tested startup sequence
+**What:** Board stops AP, joins target router as a Wi-Fi client, obtains IP via DHCP.
 
-1. load Wi-Fi driver if `wlan0` is missing
-2. kill conflicting processes:
-   - `wpa_supplicant`
-   - `hostapd`
-   - `udhcpd`
-   - `dnsmasq`
-3. reset `wlan0`
-4. assign AP address
-5. start `hostapd`
-6. re-apply AP address if driver cleared it
-7. start `udhcpd`
-
-### Why this order matters
-
-The AIC8800 driver can fail AP startup if:
-
-- `wpa_supplicant` or old `hostapd` is still holding `wlan0`
-- `hostapd` starts immediately after driver load
-- the driver clears interface IP during AP mode switch
-
-Typical symptom:
-
-```sh
-nl80211: Could not configure driver mode
-```
-
-This is mainly a timing/state problem, not only a DHCP problem.
-
-### Run
-
-```sh
-cd /userdata/ap_test
-sh ./boot_ap.sh
-```
-
-### Validation
-
-Success conditions:
-
-1. logs show `AP-ENABLED`
-2. phone can discover `CameraBoard_Setup`
-3. phone can connect
-4. phone receives `192.168.4.x`
-5. board side `wlan0` holds `192.168.4.1`
-
-### Manual checks
-
-```sh
-ifconfig wlan0
-ps | grep hostapd
-ps | grep udhcpd
-cat /userdata/ap_test/runtime/hostapd.conf
-cat /userdata/ap_test/runtime/udhcpd.conf
-```
-
-### Common issues
-
-#### `Permission denied`
-
-Fix:
-
-```sh
-chmod +x /userdata/ap_test/start_ap.sh
-chmod +x /userdata/ap_test/boot_ap.sh
-chmod +x /userdata/ap_test/scripts/*.sh
-```
-
-#### phone sees AP but cannot connect
-
-Check:
-
-- `hostapd` actually started
-- conflicting processes were killed
-- interface reset completed
-
-#### phone keeps spinning during connect
-
-Usually DHCP not running or AP interface has no IP.
-
-Check:
-
-```sh
-ifconfig wlan0
-ps | grep udhcpd
-```
-
-#### `udhcpd` cannot start due to lease path
-
-Resolved by storing lease file under:
-
-```sh
-/userdata/ap_test/runtime/udhcpd.leases
-```
-
-#### `wlan0` loses IP after `hostapd` starts
-
-Resolved by re-applying `192.168.4.1` after `hostapd` enters AP state.
-
-## Stage 2: AP Stability
-
-### Goal
-
-Turn the current successful AP test into a repeatable and stable workflow.
-
-### Actions
-
-1. reboot board
-2. run `sh ./boot_ap.sh`
-3. connect phone
-4. disconnect and reconnect
-5. stop AP and restart AP
-6. repeat multiple times
-
-### Validation
-
-Success means:
-
-- `wlan0` always appears
-- AP always becomes visible
-- phone always gets an IP
-- no stale `hostapd` or `udhcpd` process blocks next run
-
-### Exit criteria
-
-AP test is considered stable only after repeated pass across reboots and restart cycles.
-
-## Stage 3: Minimal Provisioning Service
-
-### Goal
-
-Allow the phone to submit target Wi-Fi credentials while connected to the board AP.
-
-### Recommended approach
-
-Start with a minimal HTTP page instead of app integration.
-
-Board side behavior:
-
-1. AP starts
-2. lightweight HTTP service starts on `192.168.4.1`
-3. phone opens a page in browser
-4. user enters:
-   - target SSID
-   - target password
-5. board stores configuration to persistent storage
-
-### Suggested files
-
-- `/userdata/ap_test/www/provision.html`
-- `/userdata/ap_test/scripts/save_wifi.sh`
-- `/userdata/ap_test/scripts/start_config_server.sh`
-
-### Suggested storage path
-
-```sh
-/userdata/wifi/wpa_supplicant.conf
-```
-
-or a board-local staging file first, for example:
-
-```sh
-/userdata/wifi/ap_provision.conf
-```
-
-### Validation
-
-Success means:
-
-- phone can open provisioning page
-- credentials can be submitted
-- board writes configuration successfully
-
-## Stage 4: STA Networking
-
-### Goal
-
-After provisioning, the board stops AP mode and joins the target router.
-
-### Flow
-
-1. stop `udhcpd`
-2. stop `hostapd`
-3. clear AP IP from `wlan0`
-4. launch `wpa_supplicant`
-5. request address by DHCP client
-6. verify board gets LAN IP
-
-### Suggested files
-
-- `/userdata/ap_test/scripts/start_sta.sh`
-- `/userdata/ap_test/scripts/stop_sta.sh`
-- `/userdata/ap_test/scripts/check_wifi_config.sh`
-
-### Validation
-
-Success means:
-
-- board joins target Wi-Fi
-- board obtains valid IP
-- board can ping gateway or known host
-
-### Reference test order
-
-1. save credentials:
-
-```sh
-sh /userdata/ap_test/scripts/save_wifi_cli.sh TestAP 12345678
-```
-
-2. verify config:
-
-```sh
-sh /userdata/ap_test/scripts/check_wifi_config.sh
-```
-
-3. stop AP and start STA:
-
-```sh
-sh /userdata/ap_test/scripts/start_sta.sh
-```
-
-4. inspect interface:
-
-```sh
-ifconfig wlan0
-```
-
-### Common issues
-
-- stale AP state not cleaned before STA startup
-- bad `wpa_supplicant.conf`
-- wrong interface name
-- DHCP client not running
-
-## Stage 5: Boot-Time State Machine
-
-### Goal
-
-Make network behavior automatic at boot.
-
-### Desired logic
-
-1. boot
-2. load AIC8800 driver
-3. check whether saved Wi-Fi config exists
-4. if config exists:
-   - attempt STA connect
-5. if config missing or STA connect fails:
-   - start AP provisioning mode
-
-### Suggested boot entry
-
-BusyBox system usually integrates via:
-
-- `/etc/init.d/`
-- `/etc/rcS`
-- `/etc/init.d/rcS`
-- `/etc/rc.local`
-
-### Validation
-
-Success means:
-
-- first boot without config enters AP mode
-- later boot with config enters STA mode
-- STA failure can fall back to AP mode
-
-## Stage 6: Storage Path Migration
-
-### Goal
-
-Move recording output to SD card.
-
-### Target path
-
-```sh
-/mnt/sdcard
-```
-
-### Suggested behavior
-
-1. detect SD card mount
-2. verify writable state
-3. record to `/mnt/sdcard/record/`
-4. if unavailable:
-   - fail clearly
-   - or fall back to internal path if product policy allows
-
-### Implementation
-
-Two-layer design:
-
-1. **Boot-time bind mount** (`scripts/boot_storage.sh`):
-   - On every boot, `setup_sdcard_storage()` in `lib.sh` checks `/proc/mounts` for SD card at `/mnt/sdcard`.
-   - If SD card is present: bind-mount `/mnt/sdcard/record/` → `/userdata/video0`.
-   - If SD card is absent: `/userdata/video0` stays as a plain directory on internal flash.
-   - This keeps nginx's static file root at a fixed path (`/userdata/video0`) regardless of SD card state.
-   - Called from `boot_network.sh` before network bring-up.
-
-2. **Runtime fallback in CGI** (`detect_storage()` in `lib.sh`):
-   - At script runtime, checks if `/mnt/sdcard/record` exists as a directory.
-   - If yes: `RECORD_DIR=/mnt/sdcard/record` (direct SD card path).
-   - If no: `RECORD_DIR=/userdata/video0` (internal flash fallback).
-   - All CGI scripts (`list`, `delete`, `videos`, `status.cgi`) source `lib.sh` and call `detect_storage()` to dynamically resolve the active path.
-   - `device_status.sh` also exposes `storage=` and `storage_dev=` (sdcard/internal) for monitoring.
-
-### Storage layout
-
+**Trigger:**
+
+- Scheduled automatically 3 s after provisioning (schedule_sta_after_provision)
+- Boot with saved config present (oot_network.sh → check_wifi_config() → start_sta.sh)
+- Manual: sh /userdata/ap_test/scripts/start_sta.sh
+
+**Technical flow:**
+`
+start_sta.sh
+  │
+  ├─ check_wifi_config()            — verify /userdata/wifi/wpa_supplicant.conf exists and has ssid=
+  ├─ prepare_sta_interface()        — kill AP processes (hostapd, udhcpd, dnsmasq), clear wlan0 addr
+  ├─ start_wpa_supplicant()         — wpa_supplicant -B -i wlan0 -c wpa_supplicant.conf
+  ├─ start_udhcpc()                 — udhcpc -i wlan0 -p pidfile -s /usr/share/udhcpc/default.script -b
+  ├─ wait_for_sta_ip(20)            — poll ifconfig/ip for inet addr up to 20 s
+  └─ broadcast_sta_ip()             — send CameraBoard:IP to UDP 255.255.255.255:7000
+`
+
+**Key files:** scripts/start_sta.sh, scripts/stop_sta.sh
+
+---
+
+## 5. UDP Device Discovery
+
+**What:** After STA connect, board broadcasts its LAN IP so app can discover it without scanning.
+
+**Broadcast target:** 255.255.255.255:7000 (UDP)
+**Message format:** CameraBoard:<IP> (e.g. CameraBoard:192.168.1.105)
+**Timing:** Immediately after wait_for_sta_ip() succeeds in start_sta.sh
+**Transport:** 
+c -u -w1 255.255.255.255 7000 (BusyBox nc) or socat fallback.  Skips silently if neither available.
+
+**App-side integration:**
+- Open a UDP socket, bind to port 7000
+- Parse incoming datagrams as UTF-8 string
+- Split on : — part after first colon is the board IP
+
+---
+
+## 6. Boot-Time Network State Machine
+
+**What:** At power-on, decide whether to enter AP or STA mode automatically.
+
+**Init integration:** /etc/rcS.d/S99boot_net → /userdata/ap_test/boot_network.sh
+
+**Boot order:**
+`
+S97mount_sdcard   — mount SD card if /dev/mmcblk0p6 exists
+S98eth0_static    — set eth0 to 192.168.1.200 (if interface exists)
+S99boot_net       — run boot_network.sh
+`
+
+**Decision logic in oot_network.sh:**
+`
+boot_network.sh
+  ├─ setup_sdcard_storage()     — bind-mount SD card → /userdata/video0 if present
+  ├─ ensure_wifi_driver()
+  └─ check_wifi_config()?
+       ├─ yes → start_sta.sh
+       │         ├─ success → done (STA mode)
+       │         └─ fail    → start_ap.sh (fallback)
+       └─ no  → start_ap.sh (AP mode)
+`
+
+---
+
+## 7. eth0 Static IP
+
+**What:** Wired Ethernet gets fixed IP 192.168.1.200 at boot for debug/backup access.
+
+**Script:** init.d/S98eth0_static → ifconfig eth0 192.168.1.200 netmask 255.255.255.0 up
+**Idempotent:** Only runs if /sys/class/net/eth0 exists.
+
+---
+
+## 8. Recording Control
+
+**What:** Start, stop, or query recording via HTTPS API.  Uses board-native SDK endpoints.
+
+### Start recording
+`
+PUT http://<board-ip>/cgi-bin/entry.cgi/event/start-record?duration=60&stream=0
+`
+| Field | Description |
+|-------|-------------|
+| Method | **PUT** |
+| duration | Recording length in seconds (optional) |
+| stream | Stream index: 0 = mainStream, 1 = subStream (optional) |
+| Response | {} on success |
+
+### Stop recording
+`
+PUT http://<board-ip>/cgi-bin/entry.cgi/event/stop-record
+`
+| Field | Description |
+|-------|-------------|
+| Method | **PUT** |
+| Response | {} on success |
+
+### Recording status (shell wrapper)
+`
+GET http://<board-ip>/cgi-bin/status.cgi
+`
+Returns: ecording=recording|idle
+
+### Video parameter configuration
+`
+PUT http://<board-ip>/cgi-bin/entry.cgi/video/0
+Content-Type: application/json
+
+{"sResolution":"2880*1616","sOutputDataType":"H.265","iMaxRate":8192,...}
+`
+| Field | Description |
+|-------|-------------|
+| Method | **PUT** |
+| Body | JSON string; all fields optional; full schema in kipc.ini [capability.video] |
+| Response | {} on success |
+
+**Legacy wrapper:** GET /cgi-bin/record.cgi?action=start|stop|status also works (calls control_record.sh).
+Prefer the native PUT endpoints above.
+
+---
+
+## 9. Storage Management
+
+**What:** Recordings go to SD card (/mnt/sdcard/record) when present, fall back to internal flash (/userdata/video0).
+
+### Architecture
+`
+Boot:   setup_sdcard_storage()
+          │
+          ├─ SD mounted? → mount --bind /mnt/sdcard/record → /userdata/video0
+          └─ No         → /userdata/video0 stays on internal flash
+
+Runtime: detect_storage()
+           │
+           ├─ /proc/mounts has /mnt/sdcard? → RECORD_DIR=/mnt/sdcard/record
+           └─ No                            → RECORD_DIR=/userdata/video0
+`
+
+### Component paths
 | Component | Path | Notes |
 |-----------|------|-------|
-| nginx port 8080 root | `/userdata/video0` | Fixed; bind-mount at boot if SD card present |
-| CGI scripts | `$RECORD_DIR` (dynamic) | `/mnt/sdcard/record` or `/userdata/video0` |
-| Native SDK output | `/mnt/sdcard/record` | Set in `rkipc.ini` `[storage.0].folder_name=record` |
+| nginx port 8080 | /userdata/video0 | Fixed root; bind-mounted to SD at boot if present |
+| CGI scripts | $RECORD_DIR (dynamic) | Resolved by detect_storage() in lib.sh |
+| SDK recording target | /mnt/sdcard/record | Controlled by kipc.ini [storage.0].folder_name=record |
 
-### Fallback behavior
+### Fallback behaviour
+| SD card state | /userdata/video0 | CGI RECORD_DIR |
+|---------------|---------------------|------------------|
+| Mounted at boot | bind mount → SD | /mnt/sdcard/record |
+| Absent at boot | internal flash dir | /userdata/video0 |
+| Removed after boot | internal flash (stale mount cleaned up) | /userdata/video0 |
 
-| SD card state | `/userdata/video0` resolves to | CGI `RECORD_DIR` |
-|---------------|--------------------------------|-------------------|
-| Mounted at boot | Bind mount → SD card record/ | `/mnt/sdcard/record` |
-| Absent at boot | Regular dir on internal flash | `/userdata/video0` |
-| Removed after boot | Regular dir on internal flash | `/userdata/video0` |
+### Manual storage recovery
+`sh
+sh /userdata/ap_test/scripts/boot_storage.sh
+`
 
-On SD card removal, `setup_sdcard_storage()` detects the card is gone
-(via `/proc/mounts`), unmounts the stale bind mount from `/userdata/video0`,
-and `detect_storage()` falls back to `/userdata/video0` (internal flash).
-Run `sh /userdata/ap_test/scripts/boot_storage.sh` after reinserting the
-card to re-establish the bind mount without a full reboot.
+### Storage status
+`sh
+GET /cgi-bin/status.cgi
+# Returns:  storage=/mnt/sdcard/record  or  /userdata/video0
+#           storage_dev=sdcard  or  internal
+`
 
-### Files changed
+### SDK config (kipc.ini)
+`ini
+[storage]
+mount_path                     = /mnt/sdcard
+dev_path                       = /dev/mmcblk0p6
 
-- `scripts/lib.sh` — added `RECORD_DIR`, `detect_storage()`, `ensure_record_dir()`, `setup_sdcard_storage()`
-- `scripts/boot_storage.sh` — new boot-time storage setup script
-- `scripts/boot_network.sh` — calls `setup_sdcard_storage` before network bring-up
-- `scripts/device_status.sh` — exposes `storage=` and `storage_dev=` in status output
-- `www/cgi-bin/list`, `delete`, `videos` — source `lib.sh` + `detect_storage()` instead of hardcoded path
-- `nginx.conf` — port 8080 root stays at `/userdata/video0` (bind-mount bridges to SD card)
-- `rkipc.ini` — `folder_name=record` aligns with `/mnt/sdcard/record`
+[storage.0]
+enable                         = 0          ; ← set to 1 when ready to record
+folder_name                    = record
+file_format                    = mp4
+file_duration                  = 60
+`
 
-### Validation
+---
 
-Success means:
+## 10. Video File Listing
 
-- recordings land on SD card
-- insufficient space is handled
-- absent SD card is handled
-- CGI scripts gracefully return empty results when no storage is available
-- `boot_storage.sh` logs the active storage path at boot
-- `status.cgi` reports correct `storage_dev` (sdcard or internal)
+### JSON listing
+`
+GET http://<board-ip>/cgi-bin/list
+`
+| Field | Description |
+|-------|-------------|
+| Method | **GET** |
+| Response | JSON |
 
-## Stage 7: Control + Video Transport
+Response format:
+`json
+{
+  "dir": "/mnt/sdcard/record",
+  "recording": false,
+  "files": [
+    {"name": "20260616_143000.mp4", "size": 52428800, "mtime": 1687435200},
+    ...
+  ]
+}
+`
+| Field | Type | Description |
+|-------|------|-------------|
+| dir | string | Current recording directory (resolved by detect_storage()) |
+| recording | bool | Whether a recording is in progress (checks open FD in dir) |
+| files[].name | string | Filename |
+| files[].size | integer | File size in bytes |
+| files[].mtime | integer | Modification time as Unix timestamp |
 
-### Goal
+### HTML listing
+`
+GET http://<board-ip>/cgi-bin/videos
+`
+Returns HTML page with clickable download links (auto-refresh 10 s).  Links point to http://<board-ip>:8080/<filename>.
 
-Add remote device control and live video transport for the phone.
+---
 
-### Recommended split
+## 11. Video File Download
 
-- control channel:
-  - HTTP
-  - TCP
-  - WebSocket
-- video channel:
-  - RTSP first for validation
-  - evaluate WebRTC only if lower latency is required later
+`
+GET http://<board-ip>:8080/<filename>
+`
+| Field | Description |
+|-------|-------------|
+| Method | **GET** |
+| Port | **8080** (separate nginx server block) |
+| Root | /userdata/video0 (bind-mounted to SD at boot if present) |
+| Transport | Zero-copy via nginx sendfile on |
 
-### Suggested rollout
+No directory listing on this port — use /cgi-bin/list or /cgi-bin/videos for file discovery.
 
-1. control commands first
-   - start record
-   - stop record
-   - query status
-   - query storage
-2. live video next
-3. integrated app flow last
+---
 
-### Validation
+## 12. Video File Deletion
 
-Success means:
+`
+POST http://<board-ip>/cgi-bin/delete?name=<filename>
+`
+| Field | Description |
+|-------|-------------|
+| Method | **POST** |
+| name | Filename to delete (no path separators allowed) |
+| Response (ok) | {"ok":true} |
+| Response (fail) | {"ok":false,"error":"..."} |
 
-- phone can issue commands reliably
-- video preview is available
-- control and video do not block each other
+Safety: blocks filenames containing /, \, or .. to prevent path-traversal.
 
-### Verified board-native interfaces
+---
 
-Current confirmed board behavior:
+## 13. RTSP Live Preview
 
-- start record:
-
-```sh
-PUT /cgi-bin/entry.cgi/event/start-record
-```
-
-- stop record:
-
-```sh
-PUT /cgi-bin/entry.cgi/event/stop-record
-```
-
-- typical HTTP response:
-
-```sh
-{}
-```
-
-- RTSP substream preview:
-
-```sh
+`
 rtsp://<board-ip>/live/1
-```
+rtsp://<board-ip>/live/0
+`
+| Stream | Resolution |
+|--------|-----------|
+| /live/0 | Main stream (2880x1616) |
+| /live/1 | Sub stream (640x480) |
 
-- current recording output path:
+Served by the board SDK's RTSP server (port 554).  Not part of nginx.
 
-```sh
-/mnt/sdcard/record
-```
+---
 
-### Current Stage 7 conclusion
+## 14. Device Status
 
-For this board, the preferred Stage 7 path is:
+`
+GET http://<board-ip>/cgi-bin/status.cgi
+`
+Response:
+`
+mode=ap|sta|idle
+ip=<IPv4 address or empty>
+recording=recording|idle
+storage=/mnt/sdcard/record|/userdata/video0
+storage_dev=sdcard|internal
+`
 
-- control channel: native HTTP endpoints
-- preview channel: RTSP substream `/live/1`
-- recording verification: inspect `/mnt/sdcard/record`
+---
 
-## Stage FT: File Transfer (Phone Pull)
+## 15. HTTP Endpoint Summary
 
-### Goal
+| Method | Path | Port | Description |
+|--------|------|------|-------------|
+| GET | /cgi-bin/save_wifi.cgi?ssid=&psk= | 80 | Wi-Fi provisioning |
+| GET | /cgi-bin/list | 80 | JSON video file list |
+| GET | /cgi-bin/videos | 80 | HTML video file list |
+| GET | /cgi-bin/status.cgi | 80 | Device status |
+| GET | /cgi-bin/record.cgi?action=start\|stop\|status | 80 | Recording control (legacy wrapper) |
+| GET | /<filename> | 8080 | Raw file download |
+| PUT | /cgi-bin/entry.cgi/event/start-record | 80 | Start recording (native) |
+| PUT | /cgi-bin/entry.cgi/event/stop-record | 80 | Stop recording (native) |
+| PUT | /cgi-bin/entry.cgi/video/0 | 80 | Configure video parameters (JSON body) |
+| POST | /cgi-bin/delete?name= | 80 | Delete a recording |
+| — | tsp://<ip>/live/1 | 554 | RTSP sub-stream preview |
+| — | UDP 255.255.255.255:7000 | 7000 | STA IP broadcast after connect |
 
-Enable the phone to programmatically discover and pull recordings from the board without manual steps.
+---
 
-### Approach
+## 16. Port Assignment
 
-HTTP-based, reusing existing nginx infrastructure. No additional daemons.
+| Port | Service |
+|------|---------|
+| 80 | nginx — web pages, CGI (fcgiwrap) |
+| 554 | Board SDK RTSP server |
+| 1935 | Board SDK RTMP (nginx-rtmp) |
+| 8080 | nginx — raw video file download |
+| 7000 | UDP broadcast — STA device discovery |
 
-### Endpoints
+---
 
-1. **List API** (CGI on port 80):
-   - `GET /cgi-bin/list` returns JSON file metadata:
-   ```json
-   {"dir":"/mnt/sdcard/record","files":[{"name":"20260616_143000.mp4","size":52428800,"mtime":1687435200},...]}
-   ```
-   - Fields: `name` (filename), `size` (bytes), `mtime` (Unix timestamp)
+## 17. Deployment from Factory Board
 
-2. **File download** (nginx on port 8080):
-   - `GET http://<board-ip>:8080/<filename>` serves raw file with `sendfile on` (zero-copy)
+Full step-by-step guide is in [README.md](README.md), Section 3.  Quick summary:
 
-### Phone-Side Flow
+`sh
+# Push files
+adb push scripts    /userdata/ap_test/
+adb push conf       /userdata/ap_test/
+adb push init.d     /userdata/ap_test/
+adb push boot_network.sh boot_ap.sh start_ap.sh /userdata/ap_test/
+adb push nginx.conf /oem/usr/etc/nginx/nginx.conf
+adb push rkipc.ini  /oem/usr/etc/rkipc.ini
+adb push www/control.html www/provision.html /oem/usr/www/
+adb push www/cgi-bin/* /oem/usr/www/cgi-bin/
 
-1. Call `GET /cgi-bin/list` to enumerate board recordings
-2. Diff against local cache: skip files already downloaded (match on name + size)
-3. For each missing/newer file: `GET http://<ip>:8080/<filename>`, stream to local storage
-4. After successful download: POST /cgi-bin/delete?name=<filename> to free board storage
-4. CORS headers on port 80 allow cross-origin fetch from any host
+# Set permissions
+chmod +x /userdata/ap_test/scripts/*.sh /userdata/ap_test/boot_*.sh /userdata/ap_test/start_ap.sh
+chmod +x /userdata/ap_test/init.d/*
+chmod +x /oem/usr/www/cgi-bin/*
 
-### Why not TFTP / SCP
+# Register boot scripts
+ln -sf /userdata/ap_test/init.d/S97mount_sdcard /etc/rcS.d/S97mount_sdcard
+ln -sf /userdata/ap_test/init.d/S98eth0_static  /etc/rcS.d/S98eth0_static
+ln -sf /userdata/ap_test/init.d/S99boot_net     /etc/rcS.d/S99boot_net
 
-| Method | Verdict |
-|--------|---------|
-| TFTP | UDP on Wi-Fi unreliable; no directory listing in protocol; phone-side libraries niche |
-| SCP/SSH | Requires auth management (keys/password); sshd overhead on BusyBox; phone-side SSH library complexity |
-| HTTP | Already deployed (nginx 80+8080); CORS configured; standard HTTP client on any phone platform; Range header for resume |
-
-### Implementation
-
-- `www/cgi-bin/list`: BusyBox-compatible shell CGI, follows Content-Type-first rule
-- `nginx.conf` port 8080 `server` block: serves `/mnt/sdcard/record/` (zero-copy via `sendfile on`)
-- `nginx.conf` port 80 CORS headers: unchanged, already permissive
-
-### Validation
-
-Success means:
-- `curl http://<ip>/cgi-bin/list` returns valid JSON with file entries
-- empty directory returns `{"files":[]}`
-- Wget/curl can download a file from port 8080
-- phone browser's `fetch()` can call `/cgi-bin/list` without CORS errors
-
-## Stage 8: App Integration
-
-### Goal
-
-Complete end-to-end user flow:
-
-- phone connects to board AP
-- phone submits router credentials
-- board joins router
-- phone rediscovers board
-- phone previews video
-- phone controls capture
-
-### Recommended order
-
-1. browser-based provisioning first
-2. app-based provisioning second
-3. app device discovery
-4. app live preview
-5. app record control
-
-### Validation
-
-Success means:
-
-- first-use provisioning works
-- reconnection logic works after AP to STA transition
-- preview and capture both work from phone
-
-## Priority Order
-
-Recommended development priority:
-
-1. Wi-Fi driver stability
-2. AP startup stability
-3. provisioning page + credential storage
-4. STA connection
-5. boot-time network state machine
-6. control protocol
-7. live video
-8. SD card recording path
-9. `eth0` static IP persistence
-
-
-## Stage Completion Status
-
-| Stage | Description | Status |
-|-------|-------------|--------|
-| 0 | Wi-Fi driver load | Done |
-| 1 | AP bring-up | Done |
-| 2 | AP stability | Done |
-| 3 | Minimal provisioning (form + CGI save) | Done |
-| 4 | STA networking | Done |
-| 5 | Boot-time state machine | Done |
-| 6 | Storage path migration (SD card) | Done |
-| 6 | Storage path migration (SD card) | Done |
-| 7 | Control + video transport | Done |
-| 8 | App integration | Not started |
-
-## Board Web Server
-
-The board runs nginx + fcgiwrap (NOT BusyBox httpd). Config at `/oem/usr/etc/nginx/nginx.conf`. Symlink `/etc/nginx/nginx.conf` -> `/oem/usr/etc/nginx/nginx.conf` eliminates manual `-c` parameter.
-
-## Verified Native Interfaces
-
-1. Parameter config: `PUT /cgi-bin/entry.cgi/video/0` (JSON body with resolution, bitrate, codec, GOP, etc.)
-2. Record control: `PUT /cgi-bin/entry.cgi/event/start-record?duration=60&stream=0` / `stop-record` (response `{}`)
-3. RTSP preview: `rtsp://<ip>/live/1`
-4. Recording output: `/mnt/sdcard/record`
-5. Video file browse: `http://<ip>/cgi-bin/videos` -> download via port 8080
-
+# Reload nginx, reboot
+nginx -s reload
+reboot
+`

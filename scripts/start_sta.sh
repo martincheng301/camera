@@ -26,6 +26,7 @@ start_udhcpc
 
 if wait_for_sta_ip "$STA_CONNECT_TIMEOUT"; then
     log "STA connected successfully"
+    broadcast_sta_ip
     show_iface_status
     exit 0
 fi

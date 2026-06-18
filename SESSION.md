@@ -57,9 +57,12 @@ AP mode (`boot_ap.sh`):
 
 Key design choice: our provisioning page (`/oem/usr/www/index.html` overwritten by `provision.html`) is served by the native nginx on port 80, NOT by BusyBox httpd. CGI scripts in `/oem/usr/www/cgi-bin/` exec to `/userdata/ap_test/scripts/save_wifi.sh`.
 
-## WiFi-Side Test Flow
+## UDP Device Discovery
 
-STA mode, phone and board on same LAN:
+On STA connect, `broadcast_sta_ip()` in `lib.sh` sends `CameraBoard:IP`
+via `nc -u` to UDP 255.255.255.255:7000. App listens on that port.
+
+## WiFi-Side Test Flow
 1. Open `http://<sta-ip>/control.html` (deployed to `/oem/usr/www/control.html`)
 2. Set video params via Start Path = `/cgi-bin/entry.cgi/video/0`, paste JSON body
 3. Click Start Record -> start recording via `/cgi-bin/entry.cgi/event/start-record`
@@ -69,7 +72,7 @@ STA mode, phone and board on same LAN:
 
 ## Video File Browsing
 
-- nginx serves `/mnt/sdcard/record/` on port 8080 (raw file download, no directory listing)
+- nginx serves `/userdata/video0` on port 8080 (bind-mounted to SD card at boot if present; raw file download, no directory listing)
 - CGI script `/oem/usr/www/cgi-bin/videos` generates HTML file listing at `http://<ip>/cgi-bin/videos`
 - Listing page auto-refreshes every 10s, clickable links download via port 8080
 - Play in VLC: drag downloaded file into window, Ctrl+J for codec info

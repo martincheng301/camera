@@ -589,3 +589,20 @@ setup_sdcard_storage() {
     detect_storage
     log "active recording directory: $RECORD_DIR"
 }
+
+broadcast_sta_ip() {
+    ip_addr=$(get_iface_ipv4)
+    if [ -z "$ip_addr" ]; then
+        return 1
+    fi
+    msg="CameraBoard:$ip_addr"
+    if command -v nc >/dev/null 2>&1; then
+        printf '%s' "$msg" | nc -u -w1 255.255.255.255 7000 >/dev/null 2>&1 || true
+        log "broadcasted STA IP $ip_addr to UDP 7000"
+    elif command -v socat >/dev/null 2>&1; then
+        printf '%s' "$msg" | socat - UDP-DATAGRAM:255.255.255.255:7000,broadcast
+        log "broadcasted STA IP $ip_addr via socat"
+    else
+        log "no nc or socat, skipping UDP broadcast"
+    fi
+}

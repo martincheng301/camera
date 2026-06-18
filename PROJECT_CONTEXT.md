@@ -194,7 +194,7 @@ Verified board-native media/control paths:
 - record stop: `PUT /cgi-bin/entry.cgi/event/stop-record`
 - HTTP response: `{}`
 - RTSP preview: `rtsp://<board-ip>/live/1`
-- recording output directory: `/mnt/sdcard/record`
+- recording output directory: `/mnt/sdcard/record` (fallback: `/userdata/video0`)
 
 ## Known Failure Patterns
 
