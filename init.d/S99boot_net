@@ -1,0 +1,38 @@
+#!/bin/sh
+#
+# Boot-time network state machine.
+# Expects project deployed to /userdata/ap_test.
+
+start() {
+    if [ ! -f /userdata/ap_test/boot_network.sh ]; then
+        echo "S99boot_net: missing /userdata/ap_test/boot_network.sh"
+        return 1
+    fi
+    cd /userdata/ap_test
+    sh boot_network.sh
+}
+
+stop() {
+    if [ -f /userdata/ap_test/scripts/stop_ap.sh ]; then
+        cd /userdata/ap_test
+        sh scripts/stop_ap.sh
+    fi
+}
+
+case "${1:-}" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart)
+        stop
+        sleep 1
+        start
+        ;;
+    *)
+        echo "usage: ${0##*/} {start|stop|restart}"
+        exit 1
+        ;;
+esac

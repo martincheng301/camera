@@ -1,0 +1,12 @@
+#!/bin/sh
+#
+# Set a static IP for the wired Ethernet interface.
+# Default: 192.168.1.200
+
+ETH_IFACE=${ETH_IFACE:-eth0}
+ETH_IP=${ETH_IP:-192.168.1.200}
+ETH_NETMASK=${ETH_NETMASK:-255.255.255.0}
+
+if [ -d "/sys/class/net/$ETH_IFACE" ]; then
+    ifconfig "$ETH_IFACE" "$ETH_IP" netmask "$ETH_NETMASK" up
+fi

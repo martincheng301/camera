@@ -5,6 +5,9 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$SCRIPT_DIR/lib.sh"
 
+log "setting up recording storage"
+setup_sdcard_storage
+
 log "bringing up wifi driver"
 ensure_wifi_driver
 

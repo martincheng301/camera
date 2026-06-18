@@ -1,5 +1,8 @@
 #!/bin/sh
 printf 'Content-Type: text/html\r\n\r\n'
+. /userdata/ap_test/scripts/lib.sh
+detect_storage
+
 cat <<'HTML'
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Videos</title>
@@ -15,11 +18,12 @@ a:hover{text-decoration:underline}
 .refresh{float:right;font-size:13px;color:#999}
 </style></head><body>
 <h2>Video Files <span class="refresh">auto-refresh 10s</span></h2>
-<p class="info">/userdata/video0</p>
-<ul>
 HTML
 
-for f in /userdata/video0/*; do
+printf '<p class="info">%s</p>\n' "$RECORD_DIR"
+printf '<ul>\n'
+
+for f in "$RECORD_DIR"/*; do
     [ -f "$f" ] || continue
     name=$(basename "$f")
     size=$(ls -lh "$f" | awk '{print $5}')

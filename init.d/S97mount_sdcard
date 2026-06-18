@@ -1,0 +1,9 @@
+#!/bin/sh
+#
+# Mount SD card to /mnt/sdcard if not already mounted.
+# Factory boards may not have /etc/fstab configured.
+
+if ! grep -qs ' /mnt/sdcard ' /proc/mounts && [ -e /dev/mmcblk0p6 ]; then
+    mkdir -p /mnt/sdcard
+    mount -t auto /dev/mmcblk0p6 /mnt/sdcard
+fi

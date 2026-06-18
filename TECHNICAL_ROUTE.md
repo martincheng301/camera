@@ -370,6 +370,56 @@ Move recording output to SD card.
    - fail clearly
    - or fall back to internal path if product policy allows
 
+### Implementation
+
+Two-layer design:
+
+1. **Boot-time bind mount** (`scripts/boot_storage.sh`):
+   - On every boot, `setup_sdcard_storage()` in `lib.sh` checks `/proc/mounts` for SD card at `/mnt/sdcard`.
+   - If SD card is present: bind-mount `/mnt/sdcard/record/` → `/userdata/video0`.
+   - If SD card is absent: `/userdata/video0` stays as a plain directory on internal flash.
+   - This keeps nginx's static file root at a fixed path (`/userdata/video0`) regardless of SD card state.
+   - Called from `boot_network.sh` before network bring-up.
+
+2. **Runtime fallback in CGI** (`detect_storage()` in `lib.sh`):
+   - At script runtime, checks if `/mnt/sdcard/record` exists as a directory.
+   - If yes: `RECORD_DIR=/mnt/sdcard/record` (direct SD card path).
+   - If no: `RECORD_DIR=/userdata/video0` (internal flash fallback).
+   - All CGI scripts (`list`, `delete`, `videos`, `status.cgi`) source `lib.sh` and call `detect_storage()` to dynamically resolve the active path.
+   - `device_status.sh` also exposes `storage=` and `storage_dev=` (sdcard/internal) for monitoring.
+
+### Storage layout
+
+| Component | Path | Notes |
+|-----------|------|-------|
+| nginx port 8080 root | `/userdata/video0` | Fixed; bind-mount at boot if SD card present |
+| CGI scripts | `$RECORD_DIR` (dynamic) | `/mnt/sdcard/record` or `/userdata/video0` |
+| Native SDK output | `/mnt/sdcard/record` | Set in `rkipc.ini` `[storage.0].folder_name=record` |
+
+### Fallback behavior
+
+| SD card state | `/userdata/video0` resolves to | CGI `RECORD_DIR` |
+|---------------|--------------------------------|-------------------|
+| Mounted at boot | Bind mount → SD card record/ | `/mnt/sdcard/record` |
+| Absent at boot | Regular dir on internal flash | `/userdata/video0` |
+| Removed after boot | Regular dir on internal flash | `/userdata/video0` |
+
+On SD card removal, `setup_sdcard_storage()` detects the card is gone
+(via `/proc/mounts`), unmounts the stale bind mount from `/userdata/video0`,
+and `detect_storage()` falls back to `/userdata/video0` (internal flash).
+Run `sh /userdata/ap_test/scripts/boot_storage.sh` after reinserting the
+card to re-establish the bind mount without a full reboot.
+
+### Files changed
+
+- `scripts/lib.sh` — added `RECORD_DIR`, `detect_storage()`, `ensure_record_dir()`, `setup_sdcard_storage()`
+- `scripts/boot_storage.sh` — new boot-time storage setup script
+- `scripts/boot_network.sh` — calls `setup_sdcard_storage` before network bring-up
+- `scripts/device_status.sh` — exposes `storage=` and `storage_dev=` in status output
+- `www/cgi-bin/list`, `delete`, `videos` — source `lib.sh` + `detect_storage()` instead of hardcoded path
+- `nginx.conf` — port 8080 root stays at `/userdata/video0` (bind-mount bridges to SD card)
+- `rkipc.ini` — `folder_name=record` aligns with `/mnt/sdcard/record`
+
 ### Validation
 
 Success means:
@@ -377,6 +427,9 @@ Success means:
 - recordings land on SD card
 - insufficient space is handled
 - absent SD card is handled
+- CGI scripts gracefully return empty results when no storage is available
+- `boot_storage.sh` logs the active storage path at boot
+- `status.cgi` reports correct `storage_dev` (sdcard or internal)
 
 ## Stage 7: Control + Video Transport
 
@@ -443,7 +496,7 @@ rtsp://<board-ip>/live/1
 - current recording output path:
 
 ```sh
-/userdata/video0
+/mnt/sdcard/record
 ```
 
 ### Current Stage 7 conclusion
@@ -452,7 +505,7 @@ For this board, the preferred Stage 7 path is:
 
 - control channel: native HTTP endpoints
 - preview channel: RTSP substream `/live/1`
-- recording verification: inspect `/userdata/video0`
+- recording verification: inspect `/mnt/sdcard/record`
 
 ## Stage FT: File Transfer (Phone Pull)
 
@@ -469,7 +522,7 @@ HTTP-based, reusing existing nginx infrastructure. No additional daemons.
 1. **List API** (CGI on port 80):
    - `GET /cgi-bin/list` returns JSON file metadata:
    ```json
-   {"dir":"/userdata/video0","files":[{"name":"20260616_143000.mp4","size":52428800,"mtime":1687435200},...]}
+   {"dir":"/mnt/sdcard/record","files":[{"name":"20260616_143000.mp4","size":52428800,"mtime":1687435200},...]}
    ```
    - Fields: `name` (filename), `size` (bytes), `mtime` (Unix timestamp)
 
@@ -495,7 +548,7 @@ HTTP-based, reusing existing nginx infrastructure. No additional daemons.
 ### Implementation
 
 - `www/cgi-bin/list`: BusyBox-compatible shell CGI, follows Content-Type-first rule
-- `nginx.conf` port 8080 `server` block: unchanged, already serves `/userdata/video0/`
+- `nginx.conf` port 8080 `server` block: serves `/mnt/sdcard/record/` (zero-copy via `sendfile on`)
 - `nginx.conf` port 80 CORS headers: unchanged, already permissive
 
 ### Validation
@@ -560,7 +613,8 @@ Recommended development priority:
 | 3 | Minimal provisioning (form + CGI save) | Done |
 | 4 | STA networking | Done |
 | 5 | Boot-time state machine | Done |
-| 6 | Storage path migration (SD card) | Not started |
+| 6 | Storage path migration (SD card) | Done |
+| 6 | Storage path migration (SD card) | Done |
 | 7 | Control + video transport | Done |
 | 8 | App integration | Not started |
 
@@ -573,6 +627,6 @@ The board runs nginx + fcgiwrap (NOT BusyBox httpd). Config at `/oem/usr/etc/ngi
 1. Parameter config: `PUT /cgi-bin/entry.cgi/video/0` (JSON body with resolution, bitrate, codec, GOP, etc.)
 2. Record control: `PUT /cgi-bin/entry.cgi/event/start-record?duration=60&stream=0` / `stop-record` (response `{}`)
 3. RTSP preview: `rtsp://<ip>/live/1`
-4. Recording output: `/userdata/video0`
+4. Recording output: `/mnt/sdcard/record`
 5. Video file browse: `http://<ip>/cgi-bin/videos` -> download via port 8080
 

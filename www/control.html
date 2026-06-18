@@ -169,7 +169,7 @@
       <pre id="output">Ready.
 
 Expected response: {}
-Recording path: /userdata/video0
+Recording path: /mnt/sdcard/record (fallback: /userdata/video0)
 Preview stream: rtsp://&lt;board-ip&gt;/live/1</pre>
     </div>
   </div>
@@ -224,8 +224,8 @@ Preview stream: rtsp://&lt;board-ip&gt;/live/1</pre>
           `HTTP: ${response.status} ${response.statusText}`,
           `Response: ${text || '(empty)'}`,
           '',
-          'Expected record directory: /userdata/video0',
-          'Preview RTSP: rtsp://<board-ip>/live/1'
+        'Expected record directory: /mnt/sdcard/record (fallback: /userdata/video0)',
+        'Preview RTSP: rtsp://<board-ip>/live/1'
         ].join('\n');
       } catch (error) {
         output.textContent = `Request failed: ${error.message}`;

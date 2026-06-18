@@ -1,10 +1,12 @@
 #!/bin/sh
 # GET /cgi-bin/list
-# {"dir":"/userdata/video0","recording":false,"files":[{"name":"...","size":...,"mtime":...},...]}
+# {"dir":"...","recording":false,"files":[{"name":"...","size":...,"mtime":...},...]}
 
 printf 'Content-Type: application/json\r\n\r\n'
 
-VIDEO_DIR="/userdata/video0"
+. /userdata/ap_test/scripts/lib.sh
+detect_storage
+VIDEO_DIR="$RECORD_DIR"
 
 _json_str() {
     printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'

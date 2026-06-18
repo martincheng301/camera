@@ -18,6 +18,7 @@ DHCP_LEASE=${DHCP_LEASE:-43200}
 HTTP_PORT=${HTTP_PORT:-80}
 WWW_DIR=${WWW_DIR:-"$PROJECT_DIR/www"}
 PROVISION_DIR=${PROVISION_DIR:-/userdata/wifi}
+RECORD_DIR=${RECORD_DIR:-}
 WPA_SUPPLICANT_CONF=${WPA_SUPPLICANT_CONF:-"$PROVISION_DIR/wpa_supplicant.conf"}
 PROVISION_STAGING_FILE=${PROVISION_STAGING_FILE:-"$PROVISION_DIR/ap_provision.conf"}
 WPA_SUPPLICANT_CTRL_DIR=${WPA_SUPPLICANT_CTRL_DIR:-/var/run/wpa_supplicant}
@@ -549,4 +550,42 @@ schedule_sta_after_provision() {
         sleep "$PROVISION_STA_DELAY"
         "$PROJECT_DIR/scripts/start_sta.sh" >"$PROVISION_STA_LOG" 2>&1
     ) </dev/null >/dev/null 2>&1 &
+}
+
+detect_storage() {
+    if grep -qs ' /mnt/sdcard ' /proc/mounts && [ -d /mnt/sdcard/record ]; then
+        RECORD_DIR=/mnt/sdcard/record
+    else
+        RECORD_DIR=/userdata/video0
+    fi
+}
+
+ensure_record_dir() {
+    mkdir -p /userdata/video0
+    mkdir -p /mnt/sdcard/record
+}
+
+setup_sdcard_storage() {
+    ensure_record_dir
+
+    if grep -qs ' /mnt/sdcard ' /proc/mounts; then
+        log "SD card detected at /mnt/sdcard"
+        # Clean any stale mount on /userdata/video0 first
+        if mountpoint -q /userdata/video0 2>/dev/null; then
+            log "clearing stale mount on /userdata/video0"
+            umount /userdata/video0
+        fi
+        log "bind-mounting /mnt/sdcard/record to /userdata/video0"
+        mount --bind /mnt/sdcard/record /userdata/video0
+    else
+        log "SD card not detected"
+        # Remove stale bind mount so /userdata/video0 reverts to internal flash
+        if mountpoint -q /userdata/video0 2>/dev/null; then
+            log "removing stale bind mount from /userdata/video0"
+            umount /userdata/video0
+        fi
+    fi
+
+    detect_storage
+    log "active recording directory: $RECORD_DIR"
 }

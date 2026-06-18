@@ -16,6 +16,7 @@ All stages 0-7 are implemented and verified:
 | 3 | Minimal provisioning (Wi-Fi credential form + CGI save) | Done |
 | 4 | STA networking (`start_sta.sh`, `stop_sta.sh`, wpa_supplicant + udhcpc) | Done |
 | 5 | Boot-time state machine (`boot_network.sh`, `S99boot_net`, `S98eth0_static`) | Done |
+| 6 | Storage path migration (`/userdata/video0` → `/mnt/sdcard/record`) | Done |
 | 7 | Control + video transport (native HTTP endpoints + RTSP) | Done |
 
 ## Confirmed Board Facts
@@ -63,12 +64,12 @@ STA mode, phone and board on same LAN:
 2. Set video params via Start Path = `/cgi-bin/entry.cgi/video/0`, paste JSON body
 3. Click Start Record -> start recording via `/cgi-bin/entry.cgi/event/start-record`
 4. F12 Network tab: compare Request URL, Method, Status, Response with Ethernet side
-5. Verify: `ls -l /userdata/video0` on board
+5. Verify: `ls -l /mnt/sdcard/record` on board
 6. Browse/download recordings: `http://<sta-ip>/cgi-bin/videos`
 
 ## Video File Browsing
 
-- nginx serves `/userdata/video0/` on port 8080 (raw file download, no directory listing)
+- nginx serves `/mnt/sdcard/record/` on port 8080 (raw file download, no directory listing)
 - CGI script `/oem/usr/www/cgi-bin/videos` generates HTML file listing at `http://<ip>/cgi-bin/videos`
 - Listing page auto-refreshes every 10s, clickable links download via port 8080
 - Play in VLC: drag downloaded file into window, Ctrl+J for codec info
@@ -82,13 +83,17 @@ All CGI shell scripts must output `Content-Type` header BEFORE `set -eu` and BEF
 - AP deploy root: `/userdata/ap_test`
 - runtime dir: `/userdata/ap_test/runtime`
 - provisioning output: `/userdata/wifi/wpa_supplicant.conf`, `/userdata/wifi/ap_provision.conf`
-- recording output: `/userdata/video0`
+- recording output: `/mnt/sdcard/record`
+- recording fallback: `/userdata/video0` (auto-fallback via `lib.sh` `detect_storage()`)
+- storage boot: `scripts/boot_storage.sh` bind-mounts SD card to `/userdata/video0` if present
+- storage status: `status.cgi` returns `storage_dev=sdcard|internal`
 - nginx config: `/oem/usr/etc/nginx/nginx.conf`
 - web pages (deployed to nginx): `/oem/usr/www/provision.html`, `/oem/usr/www/control.html`
 - CGI (deployed to nginx): `/oem/usr/www/cgi-bin/save_wifi.cgi`, `/oem/usr/www/cgi-bin/videos`
 
 ## Current Risks
 
+- SD card hot-removal while bind-mounted: I/O errors for new writes, CGI lists return gracefully empty
 - target board may not provide `/usr/share/udhcpc/default.script`
 - `wpa_supplicant.conf` may be syntactically valid but rejected at runtime
 - STA success currently depends on IP acquisition only, does not yet prove full reachability
