@@ -548,7 +548,11 @@ schedule_sta_after_provision() {
 
     (
         sleep "$PROVISION_STA_DELAY"
-        "$PROJECT_DIR/scripts/start_sta.sh" >"$PROVISION_STA_LOG" 2>&1
+        if "$PROJECT_DIR/scripts/start_sta.sh" >"$PROVISION_STA_LOG" 2>&1; then
+            exit 0
+        fi
+        echo "AP fallback: STA connect failed, restarting AP mode" >>"$PROVISION_STA_LOG"
+        "$PROJECT_DIR/scripts/start_ap.sh" >>"$PROVISION_STA_LOG" 2>&1
     ) </dev/null >/dev/null 2>&1 &
 }
 
