@@ -201,7 +201,8 @@ PUT http://<board-ip>/cgi-bin/entry.cgi/event/stop-record
 `
 GET http://<board-ip>/cgi-bin/status.cgi
 `
-Returns: ecording=recording|idle
+Returns: 
+ecording=recording|idle
 
 ### Video parameter configuration
 `
@@ -213,8 +214,30 @@ Content-Type: application/json
 | Field | Description |
 |-------|-------------|
 | Method | **PUT** |
-| Body | JSON string; all fields optional; full schema in kipc.ini [capability.video] |
+| Body | JSON string; all fields optional; full schema in 
+kipc.ini [capability.video] |
 | Response | {} on success |
+
+### Available parameters (main stream, stream 0)
+
+| Parameter | Type | Allowed values |
+|-----------|------|----------------|
+| sResolution | string | 3840*2160, 2880*1616, 1920*1080, 1280*720, 960*540, 640*360, 320*240 |
+| sOutputDataType | string | H.264, H.265 |
+| sRCMode | string | CBR, VBR |
+| sRCQuality | string | lowest, lower, low, medium, high, higher, highest |
+| sSmart | string | open, close |
+| sGOPMode | string | normalP, smartP |
+| sStreamType | string | mainStream, subStream |
+| iMaxRate | number | 256, 512, 1024, 2048, 3072, 4096, 6144, 8192, 12288, 16384 |
+| iGOP | number | 1-400 |
+| iStreamSmooth | number | 1-100 |
+| sFrameRate | string | 1/2, 1, 2, 4, 6, 8, 10, 12, 14, 15, 16, 18, 20, 25, 30 |
+
+s-prefixed keys are string values (quoted in JSON). i-prefixed keys are number values (unquoted). Send only parameters you want to change.
+
+| Response | `{}` on success |
+
 
 **Legacy wrapper:** GET /cgi-bin/record.cgi?action=start|stop|status also works (calls control_record.sh).
 Prefer the native PUT endpoints above.
@@ -243,7 +266,8 @@ Runtime: detect_storage()
 |-----------|------|-------|
 | nginx port 8080 | /userdata/video0 | Fixed root; bind-mounted to SD at boot if present |
 | CGI scripts | $RECORD_DIR (dynamic) | Resolved by detect_storage() in lib.sh |
-| SDK recording target | /mnt/sdcard/record | Controlled by kipc.ini [storage.0].folder_name=record |
+| SDK recording target | /mnt/sdcard/record | Controlled by 
+kipc.ini [storage.0].folder_name=record |
 
 ### Fallback behaviour
 | SD card state | /userdata/video0 | CGI RECORD_DIR |
@@ -264,7 +288,8 @@ GET /cgi-bin/status.cgi
 #           storage_dev=sdcard  or  internal
 `
 
-### SDK config (kipc.ini)
+### SDK config (
+kipc.ini)
 `ini
 [storage]
 mount_path                     = /mnt/sdcard
@@ -394,7 +419,8 @@ storage_dev=sdcard|internal
 | PUT | /cgi-bin/entry.cgi/event/stop-record | 80 | Stop recording (native) |
 | PUT | /cgi-bin/entry.cgi/video/0 | 80 | Configure video parameters (JSON body) |
 | POST | /cgi-bin/delete?name= | 80 | Delete a recording |
-| — | tsp://<ip>/live/1 | 554 | RTSP sub-stream preview |
+| — | 
+tsp://<ip>/live/1 | 554 | RTSP sub-stream preview |
 | — | UDP 255.255.255.255:7000 | 7000 | STA IP broadcast after connect |
 
 ---
@@ -439,4 +465,5 @@ ln -sf /userdata/ap_test/init.d/S99boot_net     /etc/rcS.d/S99boot_net
 # Reload nginx, reboot
 nginx -s reload
 reboot
-`
+`
+
