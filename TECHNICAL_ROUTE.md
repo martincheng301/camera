@@ -120,7 +120,7 @@ start_sta.sh
 
 ---
 
-## 5. UDP Device Discovery
+## 5. UDP Device Discovery(not available at RV1126B)
 
 **What:** After STA connect, board broadcasts its LAN IP so app can discover it without scanning.
 
@@ -164,7 +164,7 @@ boot_network.sh
 
 ---
 
-## 7. eth0 Static IP
+## 7. eth0 Static IP(for testing)
 
 **What:** Wired Ethernet gets fixed IP 192.168.1.200 at boot for debug/backup access.
 
@@ -179,7 +179,7 @@ boot_network.sh
 
 ### Start recording
 `
-PUT http://<board-ip>/cgi-bin/entry.cgi/event/start-record?duration=60&stream=0
+PUT http://<board-ip>/cgi-bin/entry.cgi/event/start-record
 `
 | Field | Description |
 |-------|-------------|
@@ -209,7 +209,7 @@ ecording=recording|idle
 PUT http://<board-ip>/cgi-bin/entry.cgi/video/0
 Content-Type: application/json
 
-{"sResolution":"2880*1616","sOutputDataType":"H.265","iMaxRate":8192,...}
+{"sResolution":"3840*2160","sOutputDataType":"H.265","iMaxRate":8192,...}
 `
 | Field | Description |
 |-------|-------------|
@@ -382,7 +382,7 @@ rtsp://<board-ip>/live/0
 `
 | Stream | Resolution |
 |--------|-----------|
-| /live/0 | Main stream (2880x1616) |
+| /live/0 | Main stream (up to 3840x2160) |
 | /live/1 | Sub stream (640x480) |
 
 Served by the board SDK's RTSP server (port 554).  Not part of nginx.

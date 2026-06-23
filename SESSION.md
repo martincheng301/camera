@@ -37,7 +37,7 @@ All stages 0-7 are implemented and verified:
 Two-layer API:
 
 1. Parameter config:
-   - `PUT /cgi-bin/entry.cgi/video/0` with JSON body `{"sResolution":"2880*1616","sOutputDataType":"H.265","iMaxRate":8192,...}`
+   - `PUT /cgi-bin/entry.cgi/video/0` with JSON body `{"sResolution":"3840*2160","sOutputDataType":"H.265","iMaxRate":8192,...}`
 2. Record control:
    - `PUT /cgi-bin/entry.cgi/event/start-record?duration=60&stream=0`
    - `PUT /cgi-bin/entry.cgi/event/stop-record`
