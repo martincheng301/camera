@@ -419,7 +419,8 @@ storage_dev=sdcard|internal
 | PUT | /cgi-bin/entry.cgi/event/stop-record | 80 | Stop recording (native) |
 | PUT | /cgi-bin/entry.cgi/video/0 | 80 | Configure video parameters (JSON body) |
 | POST | /cgi-bin/delete?name= | 80 | Delete a recording |
-| — | 
+| POST | /cgi-bin/reset.cgi | 80 | Reset Wi-Fi config and switch to AP mode |
+| — |
 tsp://<ip>/live/1 | 554 | RTSP sub-stream preview |
 | — | UDP 255.255.255.255:7000 | 7000 | STA IP broadcast after connect |
 
