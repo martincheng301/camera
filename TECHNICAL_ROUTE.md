@@ -141,7 +141,7 @@ c -u -w1 255.255.255.255 7000 (BusyBox nc) or socat fallback.  Skips silently if
 
 **What:** At power-on, decide whether to enter AP or STA mode automatically.
 
-**Init integration:** /etc/rcS.d/S99boot_net → /userdata/ap_test/boot_network.sh
+**Init integration:** /etc/init.d/S99boot_net (copied, not symlinked)
 
 **Boot order:**
 `
@@ -449,7 +449,7 @@ adb push conf       /userdata/ap_test/
 adb push init.d     /userdata/ap_test/
 adb push boot_network.sh boot_ap.sh start_ap.sh /userdata/ap_test/
 adb push nginx.conf /oem/usr/etc/nginx/nginx.conf
-adb push rkipc.ini  /oem/usr/etc/rkipc.ini
+adb push rkipc.ini  /userdata/rkipc.ini
 adb push www/control.html www/provision.html /oem/usr/www/
 adb push www/cgi-bin/* /oem/usr/www/cgi-bin/
 
@@ -459,9 +459,10 @@ chmod +x /userdata/ap_test/init.d/*
 chmod +x /oem/usr/www/cgi-bin/*
 
 # Register boot scripts
-ln -sf /userdata/ap_test/init.d/S97mount_sdcard /etc/rcS.d/S97mount_sdcard
-ln -sf /userdata/ap_test/init.d/S98eth0_static  /etc/rcS.d/S98eth0_static
-ln -sf /userdata/ap_test/init.d/S99boot_net     /etc/rcS.d/S99boot_net
+cp /userdata/ap_test/init.d/S97mount_sdcard /etc/init.d/
+cp /userdata/ap_test/init.d/S98eth0_static  /etc/init.d/
+cp /userdata/ap_test/init.d/S99boot_net     /etc/init.d/
+chmod +x /etc/init.d/S97mount_sdcard /etc/init.d/S98eth0_static /etc/init.d/S99boot_net
 
 # Reload nginx, reboot
 nginx -s reload

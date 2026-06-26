@@ -358,6 +358,7 @@ load_module_if_needed() {
     fi
 
     log "loading module $module_name"
+
     insmod "$module_path"
 }
 

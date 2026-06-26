@@ -160,6 +160,7 @@ adb push www/control.html   /oem/usr/www/
 adb push www/provision.html /oem/usr/www/
 
 # CGI scripts
+adb push www/cgi-bin/reset.cgi      /oem/usr/www/cgi-bin/
 adb push www/cgi-bin/save_wifi.cgi  /oem/usr/www/cgi-bin/
 adb push www/cgi-bin/status.cgi     /oem/usr/www/cgi-bin/
 adb push www/cgi-bin/record.cgi     /oem/usr/www/cgi-bin/
@@ -174,30 +175,52 @@ adb push www/cgi-bin/videos         /oem/usr/www/cgi-bin/
 chmod +x /userdata/ap_test/scripts/*.sh
 chmod +x /userdata/ap_test/boot_*.sh
 chmod +x /userdata/ap_test/start_ap.sh
-chmod +x /userdata/ap_test/init.d/*
+chmod +x /userdata/ap_test/init.d/*.sh
 chmod +x /oem/usr/www/cgi-bin/*
 ```
 
-### 3.6 — Reload nginx
+### 3.6 — Start nginx + fcgiwrap
 
 ```sh
-nginx -s reload
+# Ensure nginx is running
+if ! ps | grep -q '[n]ginx'; then
+    nginx
+fi
+nix -s reload
+
+# Ensure fcgiwrap is running
+if ! ps | grep -q '[f]cgiwrap'; then
+    fcgiwrap -s unix:/run/fcgiwrap.sock &
+fi
+```
+
+### 3.7a — Test AP manually before reboot
+
+# Do NOT reboot yet. Test AP startup first:
+```sh
+cd /userdata/ap_test
+sh boot_network.sh
+# Expected: logs show [ap] AP-ENABLED, [ap] AP ready
+# Phone should see CameraBoard_Setup
+
+# If AP fails, diagnose:
+ifconfig wlan0                          # wlan0 exists and has 192.168.4.1?
+ps | grep hostapd                       # hostapd running?
+ps | grep udhcpd                        # dhcp server running?
+ps | grep nginx                         # nginx running?
 ```
 
 ### 3.7 — Register boot scripts
 
-Link the init.d scripts so they run at startup.  The exact directory
-depends on the board's init system (try each):
+Copy the init.d scripts into `/etc/init.d/` so `rcS` runs them at
+boot.  (This board uses BusyBox init with `/etc/init.d/rcS`; symlinks
+do not work because `/userdata` may not be mounted yet when rcS runs.)
 
 ```sh
-# rcS.d style (most common)
-ln -sf /userdata/ap_test/init.d/S97mount_sdcard /etc/rcS.d/S97mount_sdcard
-ln -sf /userdata/ap_test/init.d/S98eth0_static  /etc/rcS.d/S98eth0_static
-ln -sf /userdata/ap_test/init.d/S99boot_net     /etc/rcS.d/S99boot_net
-
-# init.d style
-ln -sf /userdata/ap_test/init.d/S99boot_net /etc/init.d/S99boot_net
-update-rc.d S99boot_net defaults
+cp /userdata/ap_test/init.d/S97mount_sdcard /etc/init.d/
+cp /userdata/ap_test/init.d/S98eth0_static  /etc/init.d/
+cp /userdata/ap_test/init.d/S99boot_net     /etc/init.d/
+chmod +x /etc/init.d/S97mount_sdcard /etc/init.d/S98eth0_static /etc/init.d/S99boot_net
 ```
 
 ### 3.8 — Configure SD card auto-mount (optional)
