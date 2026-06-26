@@ -5,8 +5,10 @@ echo "S99: start $(date)" >> /tmp/s99_diag
 . /userdata/ap_test/scripts/lib.sh
 
 retry=0
-while [ "$retry" -lt 4 ]; do
-    echo "S99: attempt $((retry+1))/4" >> /tmp/s99_diag
+    while [ "$retry" -lt 3 ]; do
+    echo "S99: attempt $((retry+1))/3" >> /tmp/s99_diag
+    echo "--- dmesg ---" >> /tmp/s99_diag
+    dmesg | tail -5 >> /tmp/s99_diag 2>&1
     set +e
     /userdata/ap_test/boot_network.sh "$@" >> /tmp/s99_diag 2>&1
     code=$?
@@ -15,10 +17,11 @@ while [ "$retry" -lt 4 ]; do
         echo "S99: success on attempt $((retry+1))" >> /tmp/s99_diag
         exit 0
     fi
-    echo "S99: failed (exit=$code), retry in 5s" >> /tmp/s99_diag
+    echo "S99: failed (exit=$code), retry in 10s" >> /tmp/s99_diag
     retry=$((retry + 1))
-    sleep 5
+    sleep 10
 done
 
-echo "S99: failed after 4 attempts" >> /tmp/s99_diag
+    echo "S99: all 3 attempts failed, restarting init" >> /tmp/s99_diag
+kill -HUP 1
 exit 1
