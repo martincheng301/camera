@@ -1,4 +1,4 @@
-﻿# Camera Board Functional Reference
+# Camera Board Functional Reference
 
 Interface and behaviour reference for handover / app integration.
 Organised by feature, not by development stage.
@@ -469,3 +469,29 @@ nginx -s reload
 reboot
 `
 
+
+---
+
+## 18. OSD Overlay Removal
+
+### Problem
+
+rkipc autogenerates /userdata/rkipc.ini from factory template on every boot.
+Post-start edits via sed always overwritten.
+
+### Fix
+
+S99boot_net runs sed BEFORE rkipc starts (post_chk is slower than rcS):
+
+**Files:** init.d/S99boot_net (sed before rkipc start)
+
+**Verify:** grep -A2 'osd' /userdata/rkipc.ini shows enabled = 0
+
+---
+
+## 19. Boot-Time Retry (S99boot_net)
+
+S99 retries boot_network.sh up to 3 times (10s sleep) for AIC8800 SDIO init.
+On final failure: kill -HUP 1 restarts init (= soft reboot).
+
+**Files:** init.d/S99boot_net

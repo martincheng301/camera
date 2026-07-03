@@ -30,3 +30,17 @@ kill_process_if_running httpd; sleep 1; start_httpd
 log "interface status after AP setup"
 show_iface_status
 log "AP ready: ssid=$AP_SSID ip=$AP_IP dhcp=$DHCP_BACKEND"
+
+# Disable OSD overlays via rkipc API
+disable_osd() {
+    local path="$1"
+    if command -v wget >/dev/null 2>&1; then
+        wget -q -O /dev/null --method=PUT --body-data='{"enabled":0}' \
+            "http://127.0.0.1$path" 2>/dev/null
+    elif command -v nc >/dev/null 2>&1; then
+        printf 'PUT %s HTTP/1.0\r\nContent-Type: application/json\r\nContent-Length: 15\r\n\r\n{"enabled":0}' \
+            "$path" | nc -w1 127.0.0.1 80 2>/dev/null
+    fi
+}
+disable_osd /cgi-bin/entry.cgi/osd/0 || true
+disable_osd /cgi-bin/entry.cgi/osd/1 || true

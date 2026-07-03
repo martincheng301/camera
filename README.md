@@ -1,4 +1,4 @@
-﻿# Camera Board AP Test
+# Camera Board AP Test
 
 Production-ready Wi-Fi provisioning, recording, and file-transfer system for
 Rockchip IP camera boards running BusyBox + nginx.
@@ -32,7 +32,7 @@ can be brought to full functionality by following the steps below.
 | SoC  | Rockchip (RV1109 / RV1126) |
 | Wi-Fi| AIC8800 (BL-M8800DS2, SDIO) |
 | Flash| Internal flash with `/userdata` partition |
-| SD   | Optional — `/dev/mmcblk0p6` auto-mounted to `/mnt/sdcard` |
+| SD   | Optional 閳?`/dev/mmcblk0p6` auto-mounted to `/mnt/sdcard` |
 
 ### Host computer
 
@@ -56,56 +56,52 @@ can be brought to full functionality by following the steps below.
 
 ```
 board app/
-├── boot_network.sh          # Top-level boot entry (auto AP/STA)
-├── boot_ap.sh               # One-shot AP entry
-├── start_ap.sh              # AP entry (driver + start)
-├── nginx.conf               # nginx config (port 80 CGI + 8080 file server)
-├── rkipc.ini                # SDK recording config (folder_name=record)
-│
-├── scripts/
-│   ├── lib.sh               # Shared helpers (network, recording, storage)
-│   ├── boot_storage.sh      # SD card bind-mount setup
-│   ├── boot_network.sh      # Auto network state-machine
-│   ├── start_ap.sh          # AP bring-up
-│   ├── stop_ap.sh           # AP teardown
-│   ├── start_sta.sh         # STA bring-up
-│   ├── stop_sta.sh          # STA teardown
-│   ├── boot_ap.sh           # Driver + AP one-shot
-│   ├── control_record.sh    # Record start/stop/status backend
-│   ├── device_status.sh     # Network + recording + storage status
-│   ├── save_wifi.sh         # CGI backend for Wi-Fi provisioning
-│   ├── save_wifi_args.sh    # Wi-Fi config writer
-│   ├── save_wifi_cli.sh     # CLI provisioning helper
-│   ├── check_wifi_config.sh # Config existence check
-│   └── start_config_server.sh  # Config page server (legacy)
-│
-├── init.d/
-│   ├── S97mount_sdcard      # SD card auto-mount
-│   ├── S98eth0_static       # eth0 static IP (192.168.1.200)
-│   └── S99boot_net          # Boot-time network state machine
-│
-├── conf/
-│   ├── hostapd/hostapd.conf     # AP template
-│   ├── udhcpd/udhcpd.conf       # DHCP template (preferred)
-│   └── dnsmasq/dnsmasq.conf     # DHCP fallback template
-│
-└── www/
-    ├── control.html          # Record test page
-    ├── provision.html        # Wi-Fi provisioning form
-    └── cgi-bin/
-        ├── save_wifi.cgi     # Wi-Fi save endpoint
-        ├── status.cgi        # Device status endpoint
-        ├── record.cgi        # Record control endpoint
-        ├── list              # Video file JSON listing
-        ├── delete            # Video file deletion
-        └── videos            # Video file HTML listing
+閳规壕鏀㈤埞鈧?boot_network.sh          # Top-level boot entry (auto AP/STA)
+閳规壕鏀㈤埞鈧?boot_ap.sh               # One-shot AP entry
+閳规壕鏀㈤埞鈧?start_ap.sh              # AP entry (driver + start)
+閳规壕鏀㈤埞鈧?nginx.conf               # nginx config (port 80 CGI + 8080 file server)
+閳规壕鏀㈤埞鈧?rkipc.ini                # SDK recording config (folder_name=record)
+閳?閳规壕鏀㈤埞鈧?scripts/
+閳?  閳规壕鏀㈤埞鈧?lib.sh               # Shared helpers (network, recording, storage)
+閳?  閳规壕鏀㈤埞鈧?boot_storage.sh      # SD card bind-mount setup
+閳?  閳规壕鏀㈤埞鈧?boot_network.sh      # Auto network state-machine
+閳?  閳规壕鏀㈤埞鈧?start_ap.sh          # AP bring-up
+閳?  閳规壕鏀㈤埞鈧?stop_ap.sh           # AP teardown
+閳?  閳规壕鏀㈤埞鈧?start_sta.sh         # STA bring-up
+閳?  閳规壕鏀㈤埞鈧?stop_sta.sh          # STA teardown
+閳?  閳规壕鏀㈤埞鈧?boot_ap.sh           # Driver + AP one-shot
+閳?  閳规壕鏀㈤埞鈧?control_record.sh    # Record start/stop/status backend
+閳?  閳规壕鏀㈤埞鈧?device_status.sh     # Network + recording + storage status
+閳?  閳规壕鏀㈤埞鈧?save_wifi.sh         # CGI backend for Wi-Fi provisioning
+閳?  閳规壕鏀㈤埞鈧?save_wifi_args.sh    # Wi-Fi config writer
+閳?  閳规壕鏀㈤埞鈧?save_wifi_cli.sh     # CLI provisioning helper
+閳?  閳规壕鏀㈤埞鈧?check_wifi_config.sh # Config existence check
+閳?  閳规柡鏀㈤埞鈧?start_config_server.sh  # Config page server (legacy)
+閳?閳规壕鏀㈤埞鈧?init.d/
+閳?  閳规壕鏀㈤埞鈧?S97mount_sdcard      # SD card auto-mount
+閳?  閳规壕鏀㈤埞鈧?S98eth0_static       # eth0 static IP (192.168.1.200)
+閳?  閳规柡鏀㈤埞鈧?S99boot_net          # Retry boot_network.sh 3x @10s; OSD sed; kill -HUP 1 on failure
+閳?閳规壕鏀㈤埞鈧?conf/
+閳?  閳规壕鏀㈤埞鈧?hostapd/hostapd.conf     # AP template
+閳?  閳规壕鏀㈤埞鈧?udhcpd/udhcpd.conf       # DHCP template (preferred)
+閳?  閳规柡鏀㈤埞鈧?dnsmasq/dnsmasq.conf     # DHCP fallback template
+閳?閳规柡鏀㈤埞鈧?www/
+    閳规壕鏀㈤埞鈧?control.html          # Record test page
+    閳规壕鏀㈤埞鈧?provision.html        # Wi-Fi provisioning form
+    閳规柡鏀㈤埞鈧?cgi-bin/
+        閳规壕鏀㈤埞鈧?save_wifi.cgi     # Wi-Fi save endpoint
+        閳规壕鏀㈤埞鈧?status.cgi        # Device status endpoint
+        閳规壕鏀㈤埞鈧?record.cgi        # Record control endpoint
+        閳规壕鏀㈤埞鈧?list              # Video file JSON listing
+        閳规壕鏀㈤埞鈧?delete            # Video file deletion
+        閳规柡鏀㈤埞鈧?videos            # Video file HTML listing
 ```
 
 ---
 
 ## 3. From a Factory Board
 
-### 3.1 — Get shell access
+### 3.1 閳?Get shell access
 
 Connect via serial (115200 baud) or ADB:
 
@@ -115,7 +111,7 @@ adb shell
 screen /dev/ttyUSB0 115200
 ```
 
-### 3.2 — Verify board tools
+### 3.2 閳?Verify board tools
 
 ```sh
 which nginx
@@ -128,13 +124,13 @@ which ifconfig
 
 Any missing tool needs to be added to the board firmware build.
 
-### 3.3 — Create project directory
+### 3.3 閳?Create project directory
 
 ```sh
 mkdir -p /userdata/ap_test
 ```
 
-### 3.4 — Push all files
+### 3.4 閳?Push all files
 
 From host computer:
 
@@ -169,7 +165,7 @@ adb push www/cgi-bin/delete         /oem/usr/www/cgi-bin/
 adb push www/cgi-bin/videos         /oem/usr/www/cgi-bin/
 ```
 
-### 3.5 — Set permissions
+### 3.5 閳?Set permissions
 
 ```sh
 chmod +x /userdata/ap_test/scripts/*.sh
@@ -179,7 +175,7 @@ chmod +x /userdata/ap_test/init.d/*.sh
 chmod +x /oem/usr/www/cgi-bin/*
 ```
 
-### 3.6 — Start nginx + fcgiwrap
+### 3.6 閳?Start nginx + fcgiwrap
 
 ```sh
 # Ensure nginx is running
@@ -194,7 +190,7 @@ if ! ps | grep -q '[f]cgiwrap'; then
 fi
 ```
 
-### 3.7a — Test AP manually before reboot
+### 3.7a 閳?Test AP manually before reboot
 
 # Do NOT reboot yet. Test AP startup first:
 ```sh
@@ -210,7 +206,7 @@ ps | grep udhcpd                        # dhcp server running?
 ps | grep nginx                         # nginx running?
 ```
 
-### 3.7 — Register boot scripts
+### 3.7 閳?Register boot scripts
 
 Copy the init.d scripts into `/etc/init.d/` so `rcS` runs them at
 boot.  (This board uses BusyBox init with `/etc/init.d/rcS`; symlinks
@@ -223,7 +219,7 @@ cp /userdata/ap_test/init.d/S99boot_net     /etc/init.d/
 chmod +x /etc/init.d/S97mount_sdcard /etc/init.d/S98eth0_static /etc/init.d/S99boot_net
 ```
 
-### 3.8 — Configure SD card auto-mount (optional)
+### 3.8 閳?Configure SD card auto-mount (optional)
 
 If the board does not auto-mount the SD card, add an `/etc/fstab` entry:
 
@@ -237,7 +233,7 @@ Verify the block device name:
 ls -l /dev/mmcblk*
 ```
 
-### 3.9 — Reboot and verify
+### 3.9 閳?Reboot and verify
 
 ```sh
 reboot
@@ -254,21 +250,17 @@ ifconfig wlan0             # Has IP 192.168.4.1?
 
 ```
 Power on
-  │
-  ├─ /etc/rcS.d/S97mount_sdcard   — mount SD card if present
-  ├─ /etc/rcS.d/S98eth0_static    — set eth0 IP (192.168.1.200)
-  └─ /etc/rcS.d/S99boot_net
-       │
-       └─ /userdata/ap_test/boot_network.sh
-            │
-            ├─ setup_sdcard_storage()    — bind-mount SD → /userdata/video0
-            │                              falls back to internal flash
-            │
-            └─ check saved Wi-Fi config?
-                 ├─ yes → start_sta.sh    — join router
-                 │         ├─ success → done (STA mode)
-                 │         └─ fail    → start_ap.sh (fallback)
-                 └─ no  → start_ap.sh    — AP mode (CameraBoard_Setup)
+  閳?  閳规壕鏀?/etc/rcS.d/S97mount_sdcard   閳?mount SD card if present
+  閳规壕鏀?/etc/rcS.d/S98eth0_static    閳?set eth0 IP (192.168.1.200)
+  閳规柡鏀?/etc/rcS.d/S99boot_net
+       閳?       閳规柡鏀?/userdata/ap_test/boot_network.sh
+            閳?            閳规壕鏀?setup_sdcard_storage()    閳?bind-mount SD 閳?/userdata/video0
+            閳?                             falls back to internal flash
+            閳?            閳规柡鏀?check saved Wi-Fi config?
+                 閳规壕鏀?yes 閳?start_sta.sh    閳?join router
+                 閳?        閳规壕鏀?success 閳?done (STA mode)
+                 閳?        閳规柡鏀?fail    閳?start_ap.sh (fallback)
+                 閳规柡鏀?no  閳?start_ap.sh    閳?AP mode (CameraBoard_Setup)
 ```
 
 Two boot modes:
@@ -276,7 +268,7 @@ Two boot modes:
 | Mode | Trigger | Phone action |
 |------|---------|--------------|
 | AP   | No saved Wi-Fi config | Connect to `CameraBoard_Setup`, open `http://192.168.4.1` |
-| STA  | Saved config exists | Find board on LAN, open `http://<sta-ip>/control.html` |
+| STA  | Saved config exists | S99 retry 3x @ 10s; on failure kill -HUP 1 restarts init | Find board on LAN |
 
 ---
 
@@ -335,16 +327,14 @@ Two-layer design for SD card resilience:
 
 ```
 Boot:  setup_sdcard_storage()
-         │
-         ├─ SD card mounted? ──Yes──→ mount --bind /mnt/sdcard/record
-         │                                      /userdata/video0
-         └─ No ──→ /userdata/video0 stays on internal flash
+         閳?         閳规壕鏀?SD card mounted? 閳光偓閳光偓Yes閳光偓閳光偓閳?mount --bind /mnt/sdcard/record
+         閳?                                     /userdata/video0
+         閳规柡鏀?No 閳光偓閳光偓閳?/userdata/video0 stays on internal flash
 
 Runtime:  detect_storage()
-            │
-            ├─ /proc/mounts has /mnt/sdcard?
-            │    └─ Yes ──→ RECORD_DIR=/mnt/sdcard/record
-            └─ No ──→ RECORD_DIR=/userdata/video0
+            閳?            閳规壕鏀?/proc/mounts has /mnt/sdcard?
+            閳?   閳规柡鏀?Yes 閳光偓閳光偓閳?RECORD_DIR=/mnt/sdcard/record
+            閳规柡鏀?No 閳光偓閳光偓閳?RECORD_DIR=/userdata/video0
 ```
 
 | Component | Path | Notes |
@@ -364,7 +354,7 @@ sh /userdata/ap_test/scripts/boot_storage.sh
 
 ## 7. HTTP API Reference
 
-### Port 80 — nginx + fcgiwrap
+### Port 80 閳?nginx + fcgiwrap
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -377,7 +367,7 @@ sh /userdata/ap_test/scripts/boot_storage.sh
 | PUT | `/cgi-bin/entry.cgi/event/stop-record` | Stop recording (native) |
 | PUT | `/cgi-bin/entry.cgi/video/0` | Set video parameters (JSON body) |
 
-### Port 8080 — nginx raw file server
+### Port 8080 閳?nginx raw file server
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -396,8 +386,8 @@ rtsp://<board-ip>/live/1
 ### Boot
 
 - [ ] Board boots, nginx responds on port 80
-- [ ] No saved config → AP visible (`CameraBoard_Setup`)
-- [ ] Saved config → STA connects to router
+- [ ] No saved config 閳?AP visible (`CameraBoard_Setup`)
+- [ ] Saved config 閳?STA connects to router
 - [ ] eth0 has IP `192.168.1.200`
 
 ### Provisioning
@@ -508,7 +498,7 @@ mount /dev/mmcblk0p6 /mnt/sdcard
 | `scripts/start_config_server.sh` | Legacy config server entry |
 | `init.d/S97mount_sdcard` | SD card auto-mount at boot |
 | `init.d/S98eth0_static` | eth0 static IP (192.168.1.200) |
-| `init.d/S99boot_net` | Boot-time network state machine |
+| `init.d/S99boot_net` | Retry boot_network.sh 3x @10s; OSD sed; kill -HUP 1 on failure |
 | `nginx.conf` | nginx config: port 80 (CGI) + port 8080 (file server) |
 | `rkipc.ini` | SDK config: SD card mount path, recording parameters |
 | `www/provision.html` | Wi-Fi provisioning form |

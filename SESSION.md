@@ -16,7 +16,7 @@ All stages 0-7 are implemented and verified:
 | 3 | Minimal provisioning (Wi-Fi credential form + CGI save) | Done |
 | 4 | STA networking (`start_sta.sh`, `stop_sta.sh`, wpa_supplicant + udhcpc) | Done |
 | 5 | Boot-time state machine (`boot_network.sh`, `S99boot_net`, `S98eth0_static`) | Done |
-| 6 | Storage path migration (`/userdata/video0` → `/mnt/sdcard/record`) | Done |
+| 6 | Storage path migration (`/userdata/video0` 鈫?`/mnt/sdcard/record`) | Done |
 | 7 | Control + video transport (native HTTP endpoints + RTSP) | Done |
 
 ## Confirmed Board Facts
@@ -119,3 +119,23 @@ When resuming work in a new session:
 3. check board: is nginx alive on 80+8080? is filesystem intact?
 4. confirm Wi-Fi both AP and STA modes work
 
+
+## S99 Boot Retry Logic
+
+Retry boot_network.sh up to 3 times, 10s sleep between attempts.
+On success: sed disables osd.0 + osd.1 in /userdata/rkipc.ini (runs
+before post_chk starts rkipc, so it reads the modified config).
+On final failure: kill -HUP 1 restarts init (= soft reboot).
+
+## RkLunch.sh Boot Order
+
+post_chk (background) → sleep 5 → rcS (foreground, runs S99)
+post_chk: mount /userdata → insmod ko → MD5 check → cp config → rkipc
+S99 (via rcS): sed osd config → boot_network retry loop
+Timing: S99's sed completes before post_chk starts rkipc.
+
+## OSD Overlay Removal Approach
+
+rkipc writes its own defaults back to /userdata/rkipc.ini after startup,
+so post-start edits are overwritten.  Fix: do sed BEFORE rkipc starts.
+S99boot_net achieves this because post_chk is slower than rcS+S99.
