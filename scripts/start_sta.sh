@@ -26,6 +26,15 @@ start_udhcpc
 
 if wait_for_sta_ip "$STA_CONNECT_TIMEOUT"; then
     log "STA connected successfully"
+    
+    # ensure nginx is running before app discovery
+    if command -v nginx >/dev/null 2>&1; then
+        if ! ps | grep -q '[n]ginx'; then
+            log "nginx not running, starting it"
+            nginx || log "warning: nginx start failed"
+        fi
+    fi
+    
     broadcast_sta_ip
     show_iface_status
     exit 0
