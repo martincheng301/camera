@@ -17,8 +17,8 @@ if check_wifi_config; then
         log "STA startup succeeded"
         exit 0
     fi
-
     log "STA startup failed, falling back to AP provisioning"
+    rm -f "$WPA_SUPPLICANT_CONF" "$PROVISION_STAGING_FILE"
 else
     log "no saved Wi-Fi config, starting AP provisioning"
 fi

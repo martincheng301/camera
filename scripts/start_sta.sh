@@ -35,8 +35,7 @@ if wait_for_sta_ip "$STA_CONNECT_TIMEOUT"; then
         fi
     fi
     
-    broadcast_sta_ip
-    show_iface_status
+    show_iface_status || true
     exit 0
 fi
 

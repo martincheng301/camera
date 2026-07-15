@@ -9,7 +9,7 @@ WLAN_IFACE=${WLAN_IFACE:-wlan0}
 AP_IP=${AP_IP:-192.168.4.1}
 AP_PREFIX=${AP_PREFIX:-24}
 AP_NETMASK=${AP_NETMASK:-255.255.255.0}
-AP_SSID=${AP_SSID:-CameraBoard_Setup}
+AP_SSID=${AP_SSID:-}
 AP_PASSPHRASE=${AP_PASSPHRASE:-12345678}
 AP_CHANNEL=${AP_CHANNEL:-6}
 DHCP_START=${DHCP_START:-192.168.4.10}
@@ -95,9 +95,22 @@ require_cmd() {
 
 write_hostapd_conf() {
     ensure_runtime_dir
+    
+    # Derive unique SSID from MAC if not explicitly set via env
+    if [ -z "$AP_SSID" ]; then
+        _mac=$(ifconfig "$WLAN_IFACE" 2>/dev/null | grep -oE 'HWaddr [0-9a-f:]{17}' | tr -d ' :' | tail -c 5)
+        if [ -n "$_mac" ]; then
+            _ap_ssid="CameraBoard_${_mac}"
+        else
+            _ap_ssid="CameraBoard_Setup"
+        fi
+    else
+        _ap_ssid="$AP_SSID"
+    fi
+    
     sed \
         -e "s|@WLAN_IFACE@|$WLAN_IFACE|g" \
-        -e "s|@AP_SSID@|$AP_SSID|g" \
+        -e "s|@AP_SSID@|$_ap_ssid|g" \
         -e "s|@AP_PASSPHRASE@|$AP_PASSPHRASE|g" \
         -e "s|@AP_CHANNEL@|$AP_CHANNEL|g" \
         "$HOSTAPD_TEMPLATE" >"$HOSTAPD_RUNTIME_CONF"
@@ -367,6 +380,11 @@ ensure_wifi_driver() {
         return
     fi
 
+    # 清除上次崩溃的驱动状态，避免 probe 失败
+    rmmod "$AIC8800_FDRV_MODULE" 2>/dev/null || true
+    rmmod "$AIC8800_BSP_MODULE" 2>/dev/null || true
+    rmmod "$CFG80211_MODULE" 2>/dev/null || true
+ 
     if [ -f "$CFG80211_MODULE" ]; then
         load_module_if_needed "$CFG80211_MODULE"
     fi
@@ -389,7 +407,13 @@ prepare_ap_interface() {
     kill_process_if_running udhcpd
     kill_process_if_running dnsmasq
     kill_process_if_running httpd
-
+    
+    stop_by_pidfile "$HOSTAPD_PID_FILE"
+    stop_by_pidfile "$UDHCPD_PID_FILE"
+    stop_by_pidfile "$DNSMASQ_PID_FILE"
+    stop_by_pidfile "$HTTPD_PID_FILE"
+    stop_by_pidfile "$UDHCPC_PID_FILE"
+    
     log "resetting interface $WLAN_IFACE"
     iface_down || true
     sleep 2
@@ -553,6 +577,7 @@ schedule_sta_after_provision() {
             exit 0
         fi
         echo "AP fallback: STA connect failed, restarting AP mode" >>"$PROVISION_STA_LOG"
+        rm -f "$WPA_SUPPLICANT_CONF" "$PROVISION_STAGING_FILE"
         "$PROJECT_DIR/scripts/start_ap.sh" >>"$PROVISION_STA_LOG" 2>&1
     ) </dev/null >/dev/null 2>&1 &
 }
