@@ -381,10 +381,10 @@ ensure_wifi_driver() {
     fi
 
     # 清除上次崩溃的驱动状态，避免 probe 失败
-    rmmod "$AIC8800_FDRV_MODULE" 2>/dev/null || true
-    rmmod "$AIC8800_BSP_MODULE" 2>/dev/null || true
-    rmmod "$CFG80211_MODULE" 2>/dev/null || true
- 
+    rmmod "$(basename "$AIC8800_FDRV_MODULE" .ko)" 2>/dev/null || true
+    rmmod "$(basename "$AIC8800_BSP_MODULE" .ko)" 2>/dev/null || true
+    rmmod "$(basename "$CFG80211_MODULE" .ko)" 2>/dev/null || true
+
     if [ -f "$CFG80211_MODULE" ]; then
         load_module_if_needed "$CFG80211_MODULE"
     fi
