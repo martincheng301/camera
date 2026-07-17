@@ -275,6 +275,8 @@ SD 卡不在 -> /userdata/video0 走内部闪存
 
 ### RTSP 预览
 
+
+
 ```sh
 rtsp://<ip>/live/1    # 子码流（640x480，推荐预览）
 rtsp://<ip>/live/0    # 主码流（最高 3840x2160）
@@ -299,4 +301,10 @@ rtsp://<ip>/live/0    # 主码流（最高 3840x2160）
 1. AIC8800 驱动在 nl80211 最后一个用户退出时可能崩溃（已在 ensure_wifi_driver 加 rmmod 防护）
 2. 板上无 nc、无 socat -> UDP 广播不可用，App 只能靠子网扫描
 3. 无 killall -> kill_process_if_running 静默失败，依赖 stop_by_pidfile 兜底
-4. 运行时 WiFi 断开不会自动回退 AP（需加 watchdog）
+4. rkipc 每次启动时从出厂模板自动生成 /userdata/rkipc.ini，覆盖之前的修改。
+   OSD 预览页字幕设置（[osd.0] [osd.1] 的 enabled = 1）每次都会被还原。
+   修复：S99boot_net 在 rkipc 启动之前执行 sed 修改 OSD 配置：
+   sed -i '/^\[osd\.0\]/,/^\[osd\.1\]/s/enabled *= *1/enabled = 0/' /userdata/rkipc.ini
+   验证：grep -A2 'osd' /userdata/rkipc.ini 应输出 enabled = 0
+
+5. 运行时 WiFi 断开不会自动回退 AP（需加 watchdog）
