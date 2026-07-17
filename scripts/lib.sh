@@ -23,7 +23,7 @@ WPA_SUPPLICANT_CONF=${WPA_SUPPLICANT_CONF:-"$PROVISION_DIR/wpa_supplicant.conf"}
 PROVISION_STAGING_FILE=${PROVISION_STAGING_FILE:-"$PROVISION_DIR/ap_provision.conf"}
 WPA_SUPPLICANT_CTRL_DIR=${WPA_SUPPLICANT_CTRL_DIR:-/var/run/wpa_supplicant}
 STA_DHCP_LEASE_FILE=${STA_DHCP_LEASE_FILE:-"$RUNTIME_DIR/udhcpc.leases"}
-STA_CONNECT_TIMEOUT=${STA_CONNECT_TIMEOUT:-20}
+STA_CONNECT_TIMEOUT=${STA_CONNECT_TIMEOUT:-12}
 
 HOSTAPD_TEMPLATE=${HOSTAPD_TEMPLATE:-"$PROJECT_DIR/conf/hostapd/hostapd.conf"}
 DNSMASQ_TEMPLATE=${DNSMASQ_TEMPLATE:-"$PROJECT_DIR/conf/dnsmasq/dnsmasq.conf"}
@@ -302,7 +302,22 @@ wait_for_sta_ip() {
                 return 0
             fi
         fi
-
+        
+        # fast fail on bad credentials after 5 seconds
+        if [ "$count" -ge 5 ]; then
+            if command -v wpa_cli >/dev/null 2>&1; then
+                _state=$(wpa_cli -i "$WLAN_IFACE" status 2>/dev/null | grep 'wpa_state=' | cut -d= -f2 || true)
+                case "$_state" in
+                    COMPLETED|ASSOCIATED|4WAY_HANDSHAKE|GROUP_HANDSHAKE|AUTHENTICATING|ASSOCIATING|SCANNING)
+                        ;;
+                    *)
+                        log "wpa_supplicant state=$_state, fast fail"
+                        return 1
+                        ;;
+                esac
+            fi
+        fi
+        
         sleep 1
         count=$((count + 1))
     done
@@ -417,6 +432,13 @@ prepare_ap_interface() {
     log "resetting interface $WLAN_IFACE"
     iface_down || true
     sleep 2
+    
+    # 优雅停止 wpa_supplicant（接口已 down，nl80211 关闭时不触发驱动崩溃）
+    if command -v wpa_cli >/dev/null 2>&1; then
+        wpa_cli -i "$WLAN_IFACE" terminate 2>/dev/null || true
+        sleep 1
+    fi
+    
     iface_up_with_addr
     sleep 2
 }

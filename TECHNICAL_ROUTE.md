@@ -1,497 +1,302 @@
-# Camera Board Functional Reference
+# Camera Board 技术手册
 
-Interface and behaviour reference for handover / app integration.
-Organised by feature, not by development stage.
+## 1. 硬件平台
 
----
+| 组件 | 型号 / 说明 |
+|---|---|
+| SoC | Rockchip RV1109 / RV1126 |
+| Wi-Fi | AIC8800 (BL-M8800DS2)，SDIO 接口，FullMAC 类型 |
+| Flash | 内部闪存，/userdata 分区可读写 |
+| SD 卡 | /dev/mmcblk0p6 -> /mnt/sdcard（可选） |
 
-## 1. Wi-Fi Driver Load
+### AIC8800 驱动注意事项
 
-**What:** Load AIC8800 kernel modules so wlan0 appears.
+该驱动为 FullMAC 类型：Wi-Fi MAC 层在芯片固件中实现，Linux 侧通过 nl80211/cfg80211 与固件通信。
 
-**Modules:** /oem/usr/ko/cfg80211.ko, /oem/usr/ko/aic8800_bsp.ko, /oem/usr/ko/aic8800_fdrv.ko
+已知问题：当 nl80211 的最后一个用户进程（wpa_supplicant / hostapd）被 SIGTERM 杀死时，驱动可能崩溃。
+现象：wlan0 接口消失、ifconfig 找不到、但 /proc/modules 中 aic 模块仍显示已加载。
 
-**Script:** lib.sh → ensure_wifi_driver().  Called by every network script at startup; idempotent (skips if wlan0 already exists).
+规避方法（已在 ensure_wifi_driver 中实现）：加载前先 rmmod 清理，清除损坏的内核态状态。
+若驱动崩得太彻底（SDIO 设备不响应），需断电重启。
 
----
-
-## 2. AP Mode
-
-**What:** Board creates hotspot CameraBoard_Setup with DHCP so a phone can connect.
-
-**Trigger:**
-
-- Boot without saved Wi-Fi config, OR
-- STA connect fails → fallback to AP, OR
-- Manual: sh /userdata/ap_test/boot_network.sh
-
-**Network defaults:**
-
-| Item | Value |
-|------|-------|
-| SSID | CameraBoard_Setup |
-| Passphrase | 12345678 |
-| Board IP | 192.168.4.1 |
-| Netmask | 255.255.255.0 |
-| DHCP range | 192.168.4.10 - 192.168.4.100 |
-| Channel | 6 |
-
-**Technical flow:**
-`
-boot_network.sh / start_ap.sh
-  │
-  ├─ ensure_wifi_driver()          — load AIC8800 modules if wlan0 missing
-  ├─ kill conflicting processes    — wpa_supplicant, hostapd, udhcpd, dnsmasq
-  ├─ reset wlan0                   — down, sleep 2s, up
-  ├─ iface_up_with_addr()          — assign 192.168.4.1
-  ├─ start_hostapd()               — hostapd -B -P runtime/hostapd.pid runtime/hostapd.conf
-  ├─ stabilize_ap_ip()             — re-apply IP if driver cleared it during AP mode switch
-  └─ start_dhcp_server()           — udhcpd preferred, dnsmasq fallback
-`
-
-**Key files:** scripts/start_ap.sh, scripts/stop_ap.sh, conf/hostapd/hostapd.conf, conf/udhcpd/udhcpd.conf
+**不要在 prepare_ap_interface 里用 stop_by_pidfile 杀 wpa_supplicant。**
+改用 wpa_cli terminate（已在代码中实现）。
 
 ---
 
-## 3. Wi-Fi Provisioning
+## 2. 核心脚本
 
-**What:** Phone sends router SSID + password to board while connected to camera AP.
-
-**Entry point:**
-`
-GET http://192.168.4.1/cgi-bin/save_wifi.cgi?ssid=<SSID>&psk=<PASSWORD>
-`
-| Field | Description |
-|-------|-------------|
-| Method | **GET** (query string) |
-| ssid | Target router SSID |
-| psk | Router password (min 8 chars; omit for open networks) |
-| Response | OK: saved Wi-Fi config for SSID=<ssid> |
-| Response (fail) | ERROR: ... |
-
-**Technical flow:**
-`
-GET /cgi-bin/save_wifi.cgi?ssid=X&psk=Y
-  │
-  └─ nginx → fcgiwrap → /oem/usr/www/cgi-bin/save_wifi.cgi
-       │
-       └─ exec /userdata/ap_test/scripts/save_wifi.sh
-            │
-            ├─ validate ssid present, psk length >= 8 if set
-            ├─ save_wifi_args.sh  →  write /userdata/wifi/wpa_supplicant.conf
-            ├─ print "OK" response
-            └─ schedule_sta_after_provision()  →  sleep 3s → start_sta.sh
-`
-
-**Output files:**
-
-| File | Purpose |
-|------|---------|
-| /userdata/wifi/wpa_supplicant.conf | wpa_supplicant config (ctrl_interface + network block) |
-| /userdata/wifi/ap_provision.conf | Plaintext staging copy (SSID=... PSK=...) |
-
-**CGI Content-Type rule:** All CGI shell scripts must output Content-Type header BEFORE set -eu and BEFORE sourcing dependencies. Failure to do so → nginx returns 502 with no visible error.
+```
+/userdata/ap_test/boot_network.sh    顶层入口，由 S99boot_net 调用
+/userdata/ap_test/start_ap.sh        顶层 AP 入口
+/userdata/ap_test/boot_ap.sh         驱动 + AP 一键启动
+/userdata/ap_test/scripts/
+  lib.sh            所有脚本 source 的公共函数库
+  boot_network.sh   开机网络状态机
+  start_sta.sh      STA 模式启动
+  start_ap.sh       AP 模式启动
+  stop_sta.sh       STA 模式关闭
+  stop_ap.sh        AP 模式关闭
+  save_wifi.sh      CGI 后端 - 保存 Wi-Fi 配置
+  save_wifi_args.sh 写入 wpa_supplicant.conf
+  save_wifi_cli.sh  CLI 配网
+  reset_wifi.sh     重置 Wi-Fi 配置，切回 AP
+  device_status.sh  设备状态查询后端
+  control_record.sh 录像控制后端
+  check_wifi_config.sh  检查配置是否存在且有效
+  boot_storage.sh   SD 卡绑定挂载
+```
 
 ---
 
-## 4. STA Mode
+## 3. 开机启动
 
-**What:** Board stops AP, joins target router as a Wi-Fi client, obtains IP via DHCP.
+```
+init -> /etc/init.d/rcS
+  S97mount_sdcard -> 挂载 SD 卡（若 /dev/mmcblk0p6 存在）
+  S98eth0_static  -> eth0 静态 IP 192.168.1.200
+  S99boot_net     -> 重试 boot_network.sh 最多 3 次 @ 10s
+                      成功后：sed OSD 配置
+                      全失败：kill -HUP 1（重启 init）
+```
 
-**Trigger:**
+### boot_network.sh 决策
 
-- Scheduled automatically 3 s after provisioning (schedule_sta_after_provision)
-- Boot with saved config present (oot_network.sh → check_wifi_config() → start_sta.sh)
-- Manual: sh /userdata/ap_test/scripts/start_sta.sh
+```
+setup_sdcard_storage()
+  -> SD 卡已挂载 -> bind /mnt/sdcard/record -> /userdata/video0
+  -> 无 SD 卡    -> 走内部闪存 /userdata/video0
 
-**Technical flow:**
-`
-start_sta.sh
-  │
-  ├─ check_wifi_config()            — verify /userdata/wifi/wpa_supplicant.conf exists and has ssid=
-  ├─ prepare_sta_interface()        — kill AP processes (hostapd, udhcpd, dnsmasq), clear wlan0 addr
-  ├─ start_wpa_supplicant()         — wpa_supplicant -B -i wlan0 -c wpa_supplicant.conf
-  ├─ start_udhcpc()                 — udhcpc -i wlan0 -p pidfile -s /usr/share/udhcpc/default.script -b
-  ├─ wait_for_sta_ip(20)            — poll ifconfig/ip for inet addr up to 20 s
-  └─ broadcast_sta_ip()             — send CameraBoard:IP to UDP 255.255.255.255:7000
-`
+ensure_wifi_driver()
+  -> wlan0 已存在? 直接返回
+  -> 不存在:
+       rmmod aic8800_fdrv aic8800_bsp cfg80211（清除上次崩溃状态）
+       insmod cfg80211.ko -> aic8800_bsp.ko -> aic8800_fdrv.ko
+       sleep 2
+       wlan0 仍未出现? exit 1
 
-**Key files:** scripts/start_sta.sh, scripts/stop_sta.sh
-
----
-
-## 5. UDP Device Discovery(not available at RV1126B)
-
-**What:** After STA connect, board broadcasts its LAN IP so app can discover it without scanning.
-
-**Broadcast target:** 255.255.255.255:7000 (UDP)
-**Message format:** CameraBoard:<IP> (e.g. CameraBoard:192.168.1.105)
-**Timing:** Immediately after wait_for_sta_ip() succeeds in start_sta.sh
-**Transport:** 
-c -u -w1 255.255.255.255 7000 (BusyBox nc) or socat fallback.  Skips silently if neither available.
-
-**App-side integration:**
-- Open a UDP socket, bind to port 7000
-- Parse incoming datagrams as UTF-8 string
-- Split on : — part after first colon is the board IP
+check_wifi_config()?
+  有配置 -> start_sta.sh
+             成功 -> STA 模式（exit 0）
+             失败 -> rm -f 配置 -> start_ap.sh -> AP 模式
+  无配置 -> start_ap.sh -> AP 模式
+```
 
 ---
 
-## 6. Boot-Time Network State Machine
+## 4. STA 模式流程
 
-**What:** At power-on, decide whether to enter AP or STA mode automatically.
+```
+start_sta.sh:
+  ensure_wifi_driver()
+  check_wifi_config()
 
-**Init integration:** /etc/init.d/S99boot_net (copied, not symlinked)
+  prepare_sta_interface()
+    kill_process_if_running hostapd/udhcpd/dnsmasq/httpd/wpa_supplicant/udhcpc
+    stop_by_pidfile（所有进程名，含进程名校验）
+    clear_iface_addr（ifconfig wlan0 0.0.0.0 down）
+    sleep 1
+    ifconfig wlan0 up
 
-**Boot order:**
-`
-S97mount_sdcard   — mount SD card if /dev/mmcblk0p6 exists
-S98eth0_static    — set eth0 to 192.168.1.200 (if interface exists)
-S99boot_net       — run boot_network.sh
-`
+  start_wpa_supplicant()
+    wpa_supplicant -B -i wlan0 -c wpa_supplicant.conf -P pidfile -C /var/run/wpa_supplicant
+  sleep 2
 
-**Decision logic in oot_network.sh:**
-`
-boot_network.sh
-  ├─ setup_sdcard_storage()     — bind-mount SD card → /userdata/video0 if present
-  ├─ ensure_wifi_driver()
-  └─ check_wifi_config()?
-       ├─ yes → start_sta.sh
-       │         ├─ success → done (STA mode)
-       │         └─ fail    → start_ap.sh (fallback)
-       └─ no  → start_ap.sh (AP mode)
-`
+  start_udhcpc()
+    udhcpc -i wlan0 -b
 
----
+  wait_for_sta_ip(12)
+    每 1 秒检查一次：
+      有无 inet addr? -> 成功返回 0
+      已跑 5 秒? -> 检查 wpa_cli status:
+        COMPLETED / 4WAY_HANDSHAKE / ASSOCIATED / SCANNING 等 -> 继续等待
+        DISCONNECTED / INACTIVE -> 密码错误或网络不可用，立即返回 1
+    12 秒超时 -> 返回 1
 
-## 7. eth0 Static IP(for testing)
+  成功 -> nginx 保活检查 -> exit 0
+  失败 -> show_iface_status -> exit 1
+```
 
-**What:** Wired Ethernet gets fixed IP 192.168.1.200 at boot for debug/backup access.
+### 快速失败逻辑
 
-**Script:** init.d/S98eth0_static → ifconfig eth0 192.168.1.200 netmask 255.255.255.0 up
-**Idempotent:** Only runs if /sys/class/net/eth0 exists.
+正常连接链路：SCANNING -> AUTHENTICATING -> ASSOCIATING -> ASSOCIATED -> 4WAY_HANDSHAKE -> GROUP_HANDSHAKE -> COMPLETED
 
----
-
-## 8. Recording Control
-
-**What:** Start, stop, or query recording via HTTPS API.  Uses board-native SDK endpoints.
-
-### Start recording
-`
-PUT http://<board-ip>/cgi-bin/entry.cgi/event/start-record
-`
-| Field | Description |
-|-------|-------------|
-| Method | **PUT** |
-| duration | Recording length in seconds (optional) |
-| stream | Stream index: 0 = mainStream, 1 = subStream (optional) |
-| Response | {} on success |
-
-### Stop recording
-`
-PUT http://<board-ip>/cgi-bin/entry.cgi/event/stop-record
-`
-| Field | Description |
-|-------|-------------|
-| Method | **PUT** |
-| Response | {} on success |
-
-### Recording status (shell wrapper)
-`
-GET http://<board-ip>/cgi-bin/status.cgi
-`
-Returns: 
-ecording=recording|idle
-
-### Video parameter configuration
-`
-PUT http://<board-ip>/cgi-bin/entry.cgi/video/0
-Content-Type: application/json
-
-{"sResolution":"3840*2160","sOutputDataType":"H.265","iMaxRate":8192,...}
-`
-| Field | Description |
-|-------|-------------|
-| Method | **PUT** |
-| Body | JSON string; all fields optional; full schema in 
-kipc.ini [capability.video] |
-| Response | {} on success |
-
-### Available parameters (main stream, stream 0)
-
-| Parameter | Type | Allowed values |
-|-----------|------|----------------|
-| sResolution | string | 3840*2160, 2880*1616, 1920*1080, 1280*720, 960*540, 640*360, 320*240 |
-| sOutputDataType | string | H.264, H.265 |
-| sRCMode | string | CBR, VBR |
-| sRCQuality | string | lowest, lower, low, medium, high, higher, highest |
-| sSmart | string | open, close |
-| sGOPMode | string | normalP, smartP |
-| sStreamType | string | mainStream, subStream |
-| iMaxRate | number | 256, 512, 1024, 2048, 3072, 4096, 6144, 8192, 12288, 16384 |
-| iGOP | number | 1-400 |
-| iStreamSmooth | number | 1-100 |
-| sFrameRate | string | 1/2, 1, 2, 4, 6, 8, 10, 12, 14, 15, 16, 18, 20, 25, 30 |
-
-s-prefixed keys are string values (quoted in JSON). i-prefixed keys are number values (unquoted). Send only parameters you want to change.
-
-| Response | `{}` on success |
-
-
-**Legacy wrapper:** GET /cgi-bin/record.cgi?action=start|stop|status also works (calls control_record.sh).
-Prefer the native PUT endpoints above.
+第 5 秒起每次循环检查 wpa_cli status，只对 DISCONNECTED / INACTIVE / 空状态快速失败。
+4WAY_HANDSHAKE 是正常状态（路由器在验证密码），不误判。
 
 ---
 
-## 9. Storage Management
+## 5. AP 模式流程
 
-**What:** Recordings go to SD card (/mnt/sdcard/record) when present, fall back to internal flash (/userdata/video0).
+```
+start_ap.sh:
+  ensure_wifi_driver()
 
-### Architecture
-`
-Boot:   setup_sdcard_storage()
-          │
-          ├─ SD mounted? → mount --bind /mnt/sdcard/record → /userdata/video0
-          └─ No         → /userdata/video0 stays on internal flash
+  prepare_ap_interface()
+    kill_process_if_running wpa_supplicant/hostapd/udhcpd/dnsmasq/httpd
+    stop_by_pidfile（hostapd/udhcpd/dnsmasq/httpd/udhcpc，跳过 wpa_supplicant）
+    iface_down || true     -> 先关接口
+    sleep 2
+    wpa_cli -i wlan0 terminate -> 优雅停止 wpa_supplicant（接口已 down，防驱动崩溃）
+    sleep 1
+    iface_up_with_addr    -> ifconfig wlan0 192.168.4.1 netmask 255.255.255.0 up
+    sleep 2
 
-Runtime: detect_storage()
-           │
-           ├─ /proc/mounts has /mnt/sdcard? → RECORD_DIR=/mnt/sdcard/record
-           └─ No                            → RECORD_DIR=/userdata/video0
-`
+  stabilize_ap_ip()
+    循环检查 AP IP 是否稳定，最多 3 次
 
-### Component paths
-| Component | Path | Notes |
-|-----------|------|-------|
-| nginx port 8080 | /userdata/video0 | Fixed root; bind-mounted to SD at boot if present |
-| CGI scripts | $RECORD_DIR (dynamic) | Resolved by detect_storage() in lib.sh |
-| SDK recording target | /mnt/sdcard/record | Controlled by 
-kipc.ini [storage.0].folder_name=record |
+  write_hostapd_conf()
+    从 MAC 后 4 位推导 SSID: CameraBoard_XXXX
+    写入运行时 hostapd 配置
 
-### Fallback behaviour
-| SD card state | /userdata/video0 | CGI RECORD_DIR |
-|---------------|---------------------|------------------|
-| Mounted at boot | bind mount → SD | /mnt/sdcard/record |
-| Absent at boot | internal flash dir | /userdata/video0 |
-| Removed after boot | internal flash (stale mount cleaned up) | /userdata/video0 |
+  start_hostapd()      hostapd -B -P pidfile hostapd.conf
+  start_dhcp_server()  udhcpd 优先 / dnsmasq 备用
+```
 
-### Manual storage recovery
-`sh
-sh /userdata/ap_test/scripts/boot_storage.sh
-`
+### SSID 推导规则
 
-### Storage status
-`sh
-GET /cgi-bin/status.cgi
-# Returns:  storage=/mnt/sdcard/record  or  /userdata/video0
-#           storage_dev=sdcard  or  internal
-`
+```
+MAC 地址: 08:0A:12:34:56:78
+tr -d ' :' -> 080A12345678
+tail -c 5 -> 45678
+SSID: CameraBoard_45678
+```
 
-### SDK config (
-kipc.ini)
-`ini
-[storage]
-mount_path                     = /mnt/sdcard
-dev_path                       = /dev/mmcblk0p6
-
-[storage.0]
-enable                         = 0          ; ← set to 1 when ready to record
-folder_name                    = record
-file_format                    = mp4
-file_duration                  = 60
-`
+环境变量 AP_SSID 可覆盖。
 
 ---
 
-## 10. Video File Listing
+## 6. 配网与回退
 
-### JSON listing
-`
-GET http://<board-ip>/cgi-bin/list
-`
-| Field | Description |
-|-------|-------------|
-| Method | **GET** |
-| Response | JSON |
+### 正常配网
 
-Response format:
-`json
-{
-  "dir": "/mnt/sdcard/record",
-  "recording": false,
-  "files": [
-    {"name": "20260616_143000.mp4", "size": 52428800, "mtime": 1687435200},
-    ...
-  ]
-}
-`
-| Field | Type | Description |
-|-------|------|-------------|
-| dir | string | Current recording directory (resolved by detect_storage()) |
-| recording | bool | Whether a recording is in progress (checks open FD in dir) |
-| files[].name | string | Filename |
-| files[].size | integer | File size in bytes |
-| files[].mtime | integer | Modification time as Unix timestamp |
+```
+手机提交正确 Wi-Fi
+  -> save_wifi.cgi -> save_wifi.sh
+  -> 保存配置到 /userdata/wifi/wpa_supplicant.conf
+  -> schedule_sta_after_provision()
+      sleep 3
+      start_sta.sh -> 连上路由器 -> exit 0
+  -> STA 模式
+```
 
-### HTML listing
-`
-GET http://<board-ip>/cgi-bin/videos
-`
-Returns HTML page with clickable download links (auto-refresh 10 s).  Links point to http://<board-ip>:8080/<filename>.
+### 错误密码回退
 
----
+```
+手机提交错误 Wi-Fi
+  -> 同上保存配置
+  -> schedule_sta_after_provision()
+      sleep 3
+      start_sta.sh -> wpa_cli 5s 判断失败 -> exit 1
+      -> echo "AP fallback" >> log
+      -> rm -f 错误配置（重要：避免开机重试）
+      -> start_ap.sh -> AP 模式
+  总耗时：约 17 秒
+```
 
-## 11. Video File Download
+### 配网时 AP 消失 -> STA 失败 -> 回退 AP 的时序
 
-`
-GET http://<board-ip>:8080/<filename>
-`
-| Field | Description |
-|-------|-------------|
-| Method | **GET** |
-| Port | **8080** (separate nginx server block) |
-| Root | /userdata/video0 (bind-mounted to SD at boot if present) |
-| Transport | Zero-copy via nginx sendfile on |
-
-No directory listing on this port — use /cgi-bin/list or /cgi-bin/videos for file discovery.
+```
+T=0s   手机提交 Wi-Fi
+T=0.1s CGI 返回 OK
+T=3s   start_sta.sh 启动
+T=3.1s 杀 hostapd  -> 手机断开 AP
+T=5-8s wpa_supplicant 尝试连接（错误密码 -> 快速失败）
+T=5-8s exit 1
+T=5-8s rm -f 配置 + start_ap.sh
+T=14s  AP 恢复（手机可重新连接）
+```
 
 ---
 
-## 12. Video File Deletion
+## 7. 进程管理安全机制
 
-`
-POST http://<board-ip>/cgi-bin/delete?name=<filename>
-`
-| Field | Description |
-|-------|-------------|
-| Method | **POST** |
-| name | Filename to delete (no path separators allowed) |
-| Response (ok) | {"ok":true} |
-| Response (fail) | {"ok":false,"error":"..."} |
+### stop_by_pidfile 进程名校验
 
-Safety: blocks filenames containing /, \, or .. to prevent path-traversal.
+```sh
+stop_by_pidfile "$WPA_SUPPLICANT_PID_FILE" "wpa_supplicant"
+```
 
----
+调用时传第二个参数（预期进程名）。stop_by_pidfile 内部：
+1. 读取 PID 文件 -> 得到 PID
+2. kill -0 PID 检查进程是否存在
+3. 如果给了预期进程名 -> 读 /proc/PID/comm
+4. 不匹配 -> 跳过，删 PID 文件（PID 被回收给了别的进程）
+5. 匹配 -> kill PID
 
-## 13. RTSP Live Preview
+PID 文件存放在持久化存储（/userdata/ap_test/runtime/），跨重启可能包含过期 PID。
+不校验进程名会误杀被回收 PID 的其他进程。
 
-`
-rtsp://<board-ip>/live/1
-rtsp://<board-ip>/live/0
-`
-| Stream | Resolution |
-|--------|-----------|
-| /live/0 | Main stream (up to 3840x2160) |
-| /live/1 | Sub stream (640x480) |
+### prepare_ap_interface 不杀 wpa_supplicant
 
-Served by the board SDK's RTSP server (port 554).  Not part of nginx.
+prepare_sta_interface 可以杀 wpa_supplicant（因为杀完后立即启动新的 wpa_supplicant，nl80211 无空窗）。
+
+prepare_ap_interface 不杀 wpa_supplicant（改为 iface_down 后 wpa_cli terminate）。
+原因：kill 旧 wpa_supplicant -> nl80211 关闭 -> AIC8800 驱动 stop 回调 -> 可能崩溃。
 
 ---
 
-## 14. Device Status
+## 8. CRLF 行尾陷阱
 
-`
-GET http://<board-ip>/cgi-bin/status.cgi
-`
-Response:
-`
-mode=ap|sta|idle
-ip=<IPv4 address or empty>
-recording=recording|idle
-storage=/mnt/sdcard/record|/userdata/video0
-storage_dev=sdcard|internal
-`
+Windows 下编辑的 shell 脚本默认 CRLF 行尾。BusyBox sh 无法处理：
+
+- shebang `#!/bin/sh\r` -> 内核找 `/bin/sh\r` -> 不存在 -> "not found"
+- `set -e` 下 `\r` 可能导致语法解析异常
+
+修复：sed -i 's/\\r$//' scripts/*.sh
+
+预防：git 配置 core.autocrlf=input 或编辑器设置 LF 行尾。
 
 ---
 
-## 15. HTTP Endpoint Summary
+## 9. 录像与存储
 
-| Method | Path | Port | Description |
-|--------|------|------|-------------|
-| GET | /cgi-bin/save_wifi.cgi?ssid=&psk= | 80 | Wi-Fi provisioning |
-| GET | /cgi-bin/list | 80 | JSON video file list |
-| GET | /cgi-bin/videos | 80 | HTML video file list |
-| GET | /cgi-bin/status.cgi | 80 | Device status |
-| GET | /cgi-bin/record.cgi?action=start\|stop\|status | 80 | Recording control (legacy wrapper) |
-| GET | /<filename> | 8080 | Raw file download |
-| PUT | /cgi-bin/entry.cgi/event/start-record | 80 | Start recording (native) |
-| PUT | /cgi-bin/entry.cgi/event/stop-record | 80 | Stop recording (native) |
-| PUT | /cgi-bin/entry.cgi/video/0 | 80 | Configure video parameters (JSON body) |
-| POST | /cgi-bin/delete?name= | 80 | Delete a recording |
-| POST | /cgi-bin/reset.cgi | 80 | Reset Wi-Fi config and switch to AP mode |
-| — |
-tsp://<ip>/live/1 | 554 | RTSP sub-stream preview |
-| — | UDP 255.255.255.255:7000 | 7000 | STA IP broadcast after connect |
+### 控制 API
 
----
+```sh
+# 开始
+curl -X PUT 'http://<ip>/cgi-bin/entry.cgi/event/start-record?duration=60&stream=0'
 
-## 16. Port Assignment
+# 停止
+curl -X PUT 'http://<ip>/cgi-bin/entry.cgi/event/stop-record'
 
-| Port | Service |
-|------|---------|
-| 80 | nginx — web pages, CGI (fcgiwrap) |
-| 554 | Board SDK RTSP server |
-| 1935 | Board SDK RTMP (nginx-rtmp) |
-| 8080 | nginx — raw video file download |
-| 7000 | UDP broadcast — STA device discovery |
+# 状态
+curl http://<ip>/cgi-bin/status.cgi
+```
 
----
+### 存储切换
 
-## 17. Deployment from Factory Board
+```
+SD 卡存在 -> mount --bind /mnt/sdcard/record -> /userdata/video0
+SD 卡不在 -> /userdata/video0 走内部闪存
+```
 
-Full step-by-step guide is in [README.md](README.md), Section 3.  Quick summary:
+文件通过 nginx 8080 端口下载，零拷贝。
 
-`sh
-# Push files
-adb push scripts    /userdata/ap_test/
-adb push conf       /userdata/ap_test/
-adb push init.d     /userdata/ap_test/
-adb push boot_network.sh boot_ap.sh start_ap.sh /userdata/ap_test/
-adb push nginx.conf /oem/usr/etc/nginx/nginx.conf
-adb push rkipc.ini  /userdata/rkipc.ini
-adb push www/control.html www/provision.html /oem/usr/www/
-adb push www/cgi-bin/* /oem/usr/www/cgi-bin/
+### RTSP 预览
 
-# Set permissions
-chmod +x /userdata/ap_test/scripts/*.sh /userdata/ap_test/boot_*.sh /userdata/ap_test/start_ap.sh
-chmod +x /userdata/ap_test/init.d/*
-chmod +x /oem/usr/www/cgi-bin/*
-
-# Register boot scripts
-cp /userdata/ap_test/init.d/S97mount_sdcard /etc/init.d/
-cp /userdata/ap_test/init.d/S98eth0_static  /etc/init.d/
-cp /userdata/ap_test/init.d/S99boot_net     /etc/init.d/
-chmod +x /etc/init.d/S97mount_sdcard /etc/init.d/S98eth0_static /etc/init.d/S99boot_net
-
-# Reload nginx, reboot
-nginx -s reload
-reboot
-`
-
+```sh
+rtsp://<ip>/live/1    # 子码流（640x480，推荐预览）
+rtsp://<ip>/live/0    # 主码流（最高 3840x2160）
+```
 
 ---
 
-## 18. OSD Overlay Removal
+## 10. 端口分配
 
-### Problem
-
-rkipc autogenerates /userdata/rkipc.ini from factory template on every boot.
-Post-start edits via sed always overwritten.
-
-### Fix
-
-S99boot_net runs sed BEFORE rkipc starts (post_chk is slower than rcS):
-
-**Files:** init.d/S99boot_net (sed before rkipc start)
-
-**Verify:** grep -A2 'osd' /userdata/rkipc.ini shows enabled = 0
+| 端口 | 服务 |
+|---|---|
+| 80 | nginx - 网页 + CGI |
+| 554 | 板子 SDK RTSP 服务器 |
+| 1935 | nginx-rtmp RTMP |
+| 8080 | nginx - 文件下载 |
+| 7000 | UDP 广播（板上无 nc/socat，不可用）|
 
 ---
 
-## 19. Boot-Time Retry (S99boot_net)
+## 11. 已知限制
 
-S99 retries boot_network.sh up to 3 times (10s sleep) for AIC8800 SDIO init.
-On final failure: kill -HUP 1 restarts init (= soft reboot).
-
-**Files:** init.d/S99boot_net
+1. AIC8800 驱动在 nl80211 最后一个用户退出时可能崩溃（已在 ensure_wifi_driver 加 rmmod 防护）
+2. 板上无 nc、无 socat -> UDP 广播不可用，App 只能靠子网扫描
+3. 无 killall -> kill_process_if_running 静默失败，依赖 stop_by_pidfile 兜底
+4. 运行时 WiFi 断开不会自动回退 AP（需加 watchdog）
